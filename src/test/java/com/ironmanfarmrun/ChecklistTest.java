@@ -1,0 +1,220 @@
+package com.ironmanfarmrun;
+
+import java.util.ArrayList;
+import java.util.EnumMap;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
+import net.runelite.api.gameval.ItemID;
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertNull;
+import org.junit.Test;
+
+public class ChecklistTest
+{
+	private static final Checklist.Options PLAIN = new Checklist.Options(false, false, false, false, List.of());
+
+	private final Map<FarmPatch, PatchState> states = new HashMap<>();
+	private final Map<FarmLocation, LocationSettings> settings = new EnumMap<>(FarmLocation.class);
+	private final Map<Integer, Integer> items = new HashMap<>();
+	private final Map<Integer, Integer> pouchRunes = new HashMap<>();
+
+	private void ready(FarmPatch patch)
+	{
+		states.put(patch, new PatchState(PatchStatus.READY, 0));
+	}
+
+	private List<ChecklistItem> build(Checklist.Options options)
+	{
+		return build(options, null);
+	}
+
+	private List<ChecklistItem> build(Checklist.Options options, FarmingContract contract)
+	{
+		List<FarmLocation> stops = new ArrayList<>();
+		for (FarmLocation location : FarmLocation.values())
+		{
+			if (states.getOrDefault(location.herbPatch(), PatchState.UNKNOWN).getStatus().needsVisit())
+			{
+				stops.add(location);
+			}
+		}
+		Carried carried = new Carried(items, pouchRunes);
+		RunPlan plan = RunPlan.of(stops, states, Set.of(), Set.of(),
+			new RunPlan.Options(options.isAllotments(), options.isFlowers(), options.isCompost()), carried, contract);
+		return Checklist.build(plan, settings, carried, options, contract);
+	}
+
+	private static ChecklistItem find(List<ChecklistItem> checklist, String label)
+	{
+		return checklist.stream().filter(item -> item.getLabel().equals(label)).findFirst().orElse(null);
+	}
+
+	@Test
+	public void seedsOfAKindAreCountedTogether()
+	{
+		ready(FarmLocation.FALADOR.herbPatch());
+		ready(FarmLocation.CATHERBY.herbPatch());
+		ready(FarmLocation.ARDOUGNE.herbPatch());
+		items.put(ItemID.RANARR_SEED, 1);
+		items.put(ItemID.TORSTOL_SEED, 1);
+
+		assertEquals(new ChecklistItem("Herb seeds", "2 / 3", ChecklistItem.State.MISSING), find(build(PLAIN), "Herb seeds"));
+
+		items.put(ItemID.GUAM_SEED, 5);
+		assertEquals(new ChecklistItem("Herb seeds", "7 / 3", ChecklistItem.State.GOOD), find(build(PLAIN), "Herb seeds"));
+		assertNull(find(build(PLAIN), "Allotment seeds"));
+	}
+
+	@Test
+	public void seedBoxMakesAShortfallUnsure()
+	{
+		ready(FarmLocation.FALADOR.herbPatch());
+		items.put(ItemID.SEED_BOX_OPEN, 1);
+
+		assertEquals(new ChecklistItem("Herb seeds", "0 / 1 + box", ChecklistItem.State.UNSURE), find(build(PLAIN), "Herb seeds"));
+	}
+
+	@Test
+	public void allotmentAndFlowerSeedsShowHowManyPatchesTheyPlant()
+	{
+		Checklist.Options both = new Checklist.Options(true, true, false, false, List.of());
+		ready(FarmLocation.FALADOR.herbPatch());
+		items.put(ItemID.WATERMELON_SEED, 7);
+		items.put(ItemID.POTATO_SEED, 3);
+
+		List<ChecklistItem> checklist = build(both);
+		assertEquals(new ChecklistItem("Allotment seeds", "3 patches", ChecklistItem.State.GOOD), find(checklist, "Allotment seeds"));
+		assertEquals(new ChecklistItem("Flower seeds", "None", ChecklistItem.State.UNSURE), find(checklist, "Flower seeds"));
+		assertNull(find(build(PLAIN), "Allotment seeds"));
+	}
+
+	@Test
+	public void contractSeedIsAskedForWhenTheGuildIsAStop()
+	{
+		ready(FarmLocation.FARMING_GUILD.herbPatch());
+		items.put(ItemID.RANARR_SEED, 1);
+
+		assertEquals(new ChecklistItem("Contract: Irit seed", "Missing", ChecklistItem.State.MISSING),
+			find(build(PLAIN, FarmingContract.IRIT), "Contract: Irit seed"));
+
+		items.put(ItemID.IRIT_SEED, 1);
+		assertEquals(ChecklistItem.State.GOOD, find(build(PLAIN, FarmingContract.IRIT), "Contract: Irit seed").getState());
+	}
+
+	@Test
+	public void contractIsLeftOffWhenTheGuildIsNotAStop()
+	{
+		ready(FarmLocation.FALADOR.herbPatch());
+
+		assertNull(find(build(PLAIN, FarmingContract.IRIT), "Contract: Irit seed"));
+	}
+
+	@Test
+	public void compostIsCountedPerPatchUnlessBottomless()
+	{
+		ready(FarmLocation.FALADOR.herbPatch());
+		ready(FarmLocation.CATHERBY.herbPatch());
+		Checklist.Options withCompost = new Checklist.Options(false, false, true, false, List.of());
+		items.put(ItemID.BUCKET_ULTRACOMPOST, 1);
+
+		assertEquals(new ChecklistItem("Compost", "1 / 2", ChecklistItem.State.UNSURE), find(build(withCompost), "Compost"));
+		assertNull(find(build(PLAIN), "Compost"));
+
+		items.put(ItemID.BOTTOMLESS_COMPOST_BUCKET_FILLED, 1);
+		assertEquals(new ChecklistItem("Compost", "Bottomless", ChecklistItem.State.GOOD), find(build(withCompost), "Compost"));
+	}
+
+	@Test
+	public void toolsNotCarriedAreUnsureBecauseOfTheLeprechaun()
+	{
+		ready(FarmLocation.FALADOR.herbPatch());
+		items.put(ItemID.SPADE, 1);
+
+		List<ChecklistItem> checklist = build(PLAIN);
+		assertEquals(ChecklistItem.State.GOOD, find(checklist, "Spade").getState());
+		assertEquals(ChecklistItem.State.UNSURE, find(checklist, "Seed dibber").getState());
+		// Only asked for when a patch needs it
+		assertNull(find(checklist, "Rake"));
+		assertNull(find(checklist, "Plant cure"));
+	}
+
+	@Test
+	public void particularTeleportIsMissingUntilCarried()
+	{
+		ready(FarmLocation.MORYTANIA.herbPatch());
+		settings.put(FarmLocation.MORYTANIA, new LocationSettings(true, Teleport.ECTOPHIAL));
+
+		assertEquals(new ChecklistItem("Morytania: Ectophial", "Missing", ChecklistItem.State.MISSING),
+			find(build(PLAIN), "Morytania: Ectophial"));
+
+		items.put(ItemID.ECTOPHIAL_EMPTY, 1);
+		assertEquals(ChecklistItem.State.GOOD, find(build(PLAIN), "Morytania: Ectophial").getState());
+	}
+
+	@Test
+	public void anyTeleportIsSatisfiedByAnyOfTheLocationsItems()
+	{
+		ready(FarmLocation.MORYTANIA.herbPatch());
+
+		assertEquals(new ChecklistItem("Morytania teleport", "None", ChecklistItem.State.UNSURE), find(build(PLAIN), "Morytania teleport"));
+
+		items.put(ItemID.TELETAB_FENK, 2);
+		assertEquals(ChecklistItem.State.GOOD, find(build(PLAIN), "Morytania teleport").getState());
+	}
+
+	@Test
+	public void noTeleportLeavesTheLocationOffTheChecklist()
+	{
+		ready(FarmLocation.MORYTANIA.herbPatch());
+		settings.put(FarmLocation.MORYTANIA, new LocationSettings(true, Teleport.NONE));
+
+		assertNull(find(build(PLAIN), "Morytania teleport"));
+	}
+
+	@Test
+	public void spellRunesAreFoundInTheInventoryAndRunePouch()
+	{
+		ready(FarmLocation.FALADOR.herbPatch());
+		settings.put(FarmLocation.FALADOR, new LocationSettings(true, Teleport.FALADOR_SPELL));
+
+		// Falador Teleport takes a law, three airs and a water
+		items.put(ItemID.LAWRUNE, 10);
+		items.put(ItemID.AIRRUNE, 2);
+		assertEquals(new ChecklistItem("Falador: Falador spell", "Runes not found", ChecklistItem.State.UNSURE),
+			find(build(PLAIN), "Falador: Falador spell"));
+
+		pouchRunes.put(ItemID.AIRRUNE, 1);
+		pouchRunes.put(ItemID.WATERRUNE, 500);
+		assertEquals(ChecklistItem.State.GOOD, find(build(PLAIN), "Falador: Falador spell").getState());
+	}
+
+	@Test
+	public void houseTeleportIsOfferedEverywhere()
+	{
+		ready(FarmLocation.WEISS.herbPatch());
+		settings.put(FarmLocation.WEISS, new LocationSettings(true, Teleport.HOUSE_TAB));
+		items.put(ItemID.POH_TABLET_TELEPORTTOHOUSE, 3);
+
+		assertEquals(new ChecklistItem("Weiss: House tab", "Yes", ChecklistItem.State.GOOD), find(build(PLAIN), "Weiss: House tab"));
+	}
+
+	@Test
+	public void gracefulAndVolcanicAshAreOptional()
+	{
+		ready(FarmLocation.FALADOR.herbPatch());
+		assertNull(find(build(PLAIN), "Graceful"));
+		assertNull(find(build(PLAIN), "Volcanic ash"));
+
+		// Two recolours of the hood count as one piece
+		List<List<Integer>> pieces = List.of(List.of(ItemID.GRACEFUL_HOOD, 13579), List.of(ItemID.GRACEFUL_TOP));
+		Checklist.Options options = new Checklist.Options(false, false, false, true, pieces);
+		items.put(13579, 1);
+		items.put(ItemID.FOSSIL_VOLCANIC_ASH, 40);
+
+		List<ChecklistItem> checklist = build(options);
+		assertEquals(new ChecklistItem("Graceful", "1 / 2", ChecklistItem.State.MISSING), find(checklist, "Graceful"));
+		assertEquals(new ChecklistItem("Volcanic ash", "40", ChecklistItem.State.GOOD), find(checklist, "Volcanic ash"));
+	}
+}

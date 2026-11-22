@@ -132,14 +132,17 @@ class PatchObjects
 				return null;
 			}
 
+			// Patches at a location in different regions can share a varbit; the object is the nearest one's
+			FarmPatch nearest = null;
 			for (FarmPatch patch : location.getPatches())
 			{
-				if (patch.getVarbit() == composition.getVarbitId())
+				if (patch.getVarbit() == composition.getVarbitId()
+					&& (nearest == null || point.distanceTo2D(patch.getPoint()) < point.distanceTo2D(nearest.getPoint())))
 				{
-					return patch;
+					nearest = patch;
 				}
 			}
-			return null;
+			return nearest;
 		}
 		return null;
 	}

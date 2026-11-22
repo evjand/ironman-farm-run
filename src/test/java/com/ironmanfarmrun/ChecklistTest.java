@@ -3,6 +3,7 @@ package com.ironmanfarmrun;
 import java.util.ArrayList;
 import java.util.EnumMap;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -13,16 +14,22 @@ import org.junit.Test;
 
 public class ChecklistTest
 {
-	private static final Checklist.Options PLAIN = new Checklist.Options(false, false, false, false, List.of());
+	private static final Checklist.Options PLAIN = new Checklist.Options(RunType.HERB, false, false, false, false, false, List.of());
 
 	private final Map<FarmPatch, PatchState> states = new HashMap<>();
 	private final Map<FarmLocation, LocationSettings> settings = new EnumMap<>(FarmLocation.class);
 	private final Map<Integer, Integer> items = new HashMap<>();
 	private final Map<Integer, Integer> pouchRunes = new HashMap<>();
+	private final Set<FarmPatch> justPlanted = new HashSet<>();
 
 	private void ready(FarmPatch patch)
 	{
-		states.put(patch, new PatchState(PatchStatus.READY, 0));
+		ready(patch, PatchStatus.READY);
+	}
+
+	private void ready(FarmPatch patch, PatchStatus status)
+	{
+		states.put(patch, new PatchState(status, 0));
 	}
 
 	private List<ChecklistItem> build(Checklist.Options options)
@@ -32,18 +39,21 @@ public class ChecklistTest
 
 	private List<ChecklistItem> build(Checklist.Options options, FarmingContract contract)
 	{
+		RunType runType = options.getRunType();
 		List<FarmLocation> stops = new ArrayList<>();
-		for (FarmLocation location : FarmLocation.values())
+		for (FarmLocation location : FarmLocation.of(runType))
 		{
-			if (states.getOrDefault(location.herbPatch(), PatchState.UNKNOWN).getStatus().needsVisit())
+			if (location.anchors(runType).stream()
+				.anyMatch(patch -> states.getOrDefault(patch, PatchState.UNKNOWN).getStatus().needsVisit()))
 			{
 				stops.add(location);
 			}
 		}
 		Carried carried = new Carried(items, pouchRunes);
-		RunPlan plan = RunPlan.of(stops, states, Set.of(), Set.of(),
-			new RunPlan.Options(options.isAllotments(), options.isFlowers(), options.isCompost()), carried, contract);
-		return Checklist.build(plan, settings, carried, options, contract);
+		RunPlan plan = RunPlan.of(stops, states, Set.of(), Set.of(), justPlanted,
+			new RunPlan.Options(runType, options.isAllotments(), options.isFlowers(), options.isCompost(), options.isProtect(), 99),
+			carried, contract);
+		return Checklist.build(plan, states, settings, carried, options, contract);
 	}
 
 	private static ChecklistItem find(List<ChecklistItem> checklist, String label)
@@ -79,7 +89,7 @@ public class ChecklistTest
 	@Test
 	public void allotmentAndFlowerSeedsShowHowManyPatchesTheyPlant()
 	{
-		Checklist.Options both = new Checklist.Options(true, true, false, false, List.of());
+		Checklist.Options both = new Checklist.Options(RunType.HERB, true, true, false, false, false, List.of());
 		ready(FarmLocation.FALADOR.herbPatch());
 		items.put(ItemID.WATERMELON_SEED, 7);
 		items.put(ItemID.POTATO_SEED, 3);
@@ -116,7 +126,7 @@ public class ChecklistTest
 	{
 		ready(FarmLocation.FALADOR.herbPatch());
 		ready(FarmLocation.CATHERBY.herbPatch());
-		Checklist.Options withCompost = new Checklist.Options(false, false, true, false, List.of());
+		Checklist.Options withCompost = new Checklist.Options(RunType.HERB, false, false, true, false, false, List.of());
 		items.put(ItemID.BUCKET_ULTRACOMPOST, 1);
 
 		assertEquals(new ChecklistItem("Compost", "1 / 2", ChecklistItem.State.UNSURE), find(build(withCompost), "Compost"));
@@ -209,12 +219,67 @@ public class ChecklistTest
 
 		// Two recolours of the hood count as one piece
 		List<List<Integer>> pieces = List.of(List.of(ItemID.GRACEFUL_HOOD, 13579), List.of(ItemID.GRACEFUL_TOP));
-		Checklist.Options options = new Checklist.Options(false, false, false, true, pieces);
+		Checklist.Options options = new Checklist.Options(RunType.HERB, false, false, false, false, true, pieces);
 		items.put(13579, 1);
 		items.put(ItemID.FOSSIL_VOLCANIC_ASH, 40);
 
 		List<ChecklistItem> checklist = build(options);
 		assertEquals(new ChecklistItem("Graceful", "1 / 2", ChecklistItem.State.MISSING), find(checklist, "Graceful"));
 		assertEquals(new ChecklistItem("Volcanic ash", "40", ChecklistItem.State.GOOD), find(checklist, "Volcanic ash"));
+	}
+
+	private static final Checklist.Options TREES = new Checklist.Options(RunType.TREE, false, false, false, true, false, List.of());
+
+	@Test
+	public void treeRunAsksForSaplingsOfBothKinds()
+	{
+		ready(FarmLocation.LUMBRIDGE.patches(PatchType.TREE).get(0), PatchStatus.CHECK_HEALTH);
+		ready(FarmLocation.GNOME_STRONGHOLD.patches(PatchType.TREE).get(0), PatchStatus.STUMP);
+		ready(FarmLocation.GNOME_STRONGHOLD.patches(PatchType.FRUIT_TREE).get(0), PatchStatus.GROWN);
+		items.put(ItemID.PLANTPOT_YEW_SAPLING, 2);
+
+		List<ChecklistItem> checklist = build(TREES);
+		assertEquals(new ChecklistItem("Tree saplings", "2 / 2", ChecklistItem.State.GOOD), find(checklist, "Tree saplings"));
+		assertEquals(new ChecklistItem("Fruit tree saplings", "0 / 1", ChecklistItem.State.MISSING), find(checklist, "Fruit tree saplings"));
+		// A health check and a grown tree each take a removal; a stump is dug up
+		assertEquals(new ChecklistItem("Coins to remove trees", "0 / 400", ChecklistItem.State.UNSURE), find(checklist, "Coins to remove trees"));
+		assertNull(find(checklist, "Seed dibber"));
+		assertNull(find(checklist, "Herb seeds"));
+	}
+
+	@Test
+	public void paymentsFollowTheSaplingsCarried()
+	{
+		ready(FarmLocation.LUMBRIDGE.patches(PatchType.TREE).get(0), PatchStatus.CHECK_HEALTH);
+		ready(FarmLocation.VARROCK.patches(PatchType.TREE).get(0), PatchStatus.CHECK_HEALTH);
+		ready(FarmLocation.CATHERBY_ORCHARD.patches(PatchType.FRUIT_TREE).get(0), PatchStatus.CHECK_HEALTH);
+		ready(FarmLocation.BRIMHAVEN.patches(PatchType.FRUIT_TREE).get(0), PatchStatus.CHECK_HEALTH);
+		// A magic and a yew tree; one dragonfruit tree, which shares coconuts with magic, and one without a sapling
+		items.put(ItemID.PLANTPOT_MAGIC_TREE_SAPLING, 1);
+		items.put(ItemID.PLANTPOT_YEW_SAPLING, 1);
+		items.put(ItemID.PLANTPOT_DRAGONFRUIT_SAPLING, 1);
+		items.put(ItemID.COCONUT, 30);
+
+		List<ChecklistItem> checklist = build(TREES);
+		assertEquals(new ChecklistItem("Pay: coconuts", "30 / 40", ChecklistItem.State.MISSING), find(checklist, "Pay: coconuts"));
+		assertEquals(new ChecklistItem("Pay: cactus spines", "0 / 10", ChecklistItem.State.MISSING), find(checklist, "Pay: cactus spines"));
+		assertEquals(new ChecklistItem("Pay: for 1 more tree", "Bring saplings", ChecklistItem.State.UNSURE),
+			find(checklist, "Pay: for 1 more tree"));
+	}
+
+	@Test
+	public void treePlantedOnTheRunIsPaidForWhatIsGrowing()
+	{
+		// Planted at the stop the player is at, so it was a stop when the run started
+		FarmPatch tree = FarmLocation.LUMBRIDGE.patches(PatchType.TREE).get(0);
+		states.put(tree, new PatchState(PatchStatus.GROWING, 123, Sapling.MAPLE));
+		justPlanted.add(tree);
+		Carried carried = new Carried(items, pouchRunes);
+		RunPlan plan = RunPlan.of(List.of(FarmLocation.LUMBRIDGE), states, Set.of(tree), Set.of(), justPlanted,
+			new RunPlan.Options(RunType.TREE, false, false, false, true, 99), carried, null);
+
+		List<ChecklistItem> checklist = Checklist.build(plan, states, settings, carried, TREES, null);
+		assertEquals(new ChecklistItem("Pay: basket of oranges", "0 / 1", ChecklistItem.State.MISSING),
+			find(checklist, "Pay: basket of oranges"));
 	}
 }

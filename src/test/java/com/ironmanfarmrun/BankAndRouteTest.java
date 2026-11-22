@@ -1,11 +1,13 @@
 package com.ironmanfarmrun;
 
+import java.util.Arrays;
 import java.util.Collection;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import net.runelite.api.coords.WorldPoint;
 import net.runelite.api.gameval.ItemID;
 import static org.junit.Assert.assertArrayEquals;
 import static org.junit.Assert.assertEquals;
@@ -16,40 +18,57 @@ import org.junit.Test;
 
 public class BankAndRouteTest
 {
-	@Test
-	public void bankFilterOnlyShowsTheSeedsOfPatchesThePlayerTends()
+	private static BankFilterSpec spec(Object... sectionsAndItems)
 	{
-		BankFilterSpec herbsOnly = BankFilterSpec.HERBS_ONLY;
-		assertEquals(BankSection.HERB_SEEDS, herbsOnly.sectionOf(ItemID.RANARR_SEED));
-		assertNull(herbsOnly.sectionOf(ItemID.WATERMELON_SEED));
-		assertNull(herbsOnly.sectionOf(ItemID.LIMPWURT_SEED));
-		assertEquals(BankSection.EQUIPMENT, herbsOnly.sectionOf(ItemID.SPADE));
-		assertNull(herbsOnly.sectionOf(ItemID.ECTOPHIAL));
-		assertNull(herbsOnly.sectionOf(ItemID.FOSSIL_VOLCANIC_ASH));
+		Map<BankSection, List<Integer>> sections = new LinkedHashMap<>();
+		for (int i = 0; i < sectionsAndItems.length; i += 2)
+		{
+			@SuppressWarnings("unchecked")
+			List<Integer> items = (List<Integer>) sectionsAndItems[i + 1];
+			sections.put((BankSection) sectionsAndItems[i], items);
+		}
+		return new BankFilterSpec(sections);
+	}
 
-		BankFilterSpec everything = new BankFilterSpec(true, true, -1, List.of(ItemID.FOSSIL_VOLCANIC_ASH), List.of(ItemID.ECTOPHIAL));
-		assertEquals(BankSection.ALLOTMENT_SEEDS, everything.sectionOf(ItemID.WATERMELON_SEED));
-		assertEquals(BankSection.FLOWER_SEEDS, everything.sectionOf(ItemID.LIMPWURT_SEED));
-		assertEquals(BankSection.TELEPORTS, everything.sectionOf(ItemID.ECTOPHIAL));
-		assertEquals(BankSection.EQUIPMENT, everything.sectionOf(ItemID.FOSSIL_VOLCANIC_ASH));
+	@Test
+	public void bankFilterShowsEachItemInItsSection()
+	{
+		BankFilterSpec spec = spec(
+			BankSection.HERB_SEEDS, RunItems.HERB_SEEDS,
+			BankSection.EQUIPMENT, RunItems.EQUIPMENT,
+			BankSection.TELEPORTS, List.of(ItemID.ECTOPHIAL));
 
-		// A contract's seed is shown in its section even without the rest of that section
-		BankFilterSpec contract = new BankFilterSpec(false, false, ItemID.WATERMELON_SEED, List.of(), List.of());
-		assertEquals(BankSection.ALLOTMENT_SEEDS, contract.sectionOf(ItemID.WATERMELON_SEED));
-		assertNull(contract.sectionOf(ItemID.POTATO_SEED));
+		assertEquals(BankSection.HERB_SEEDS, spec.sectionOf(ItemID.RANARR_SEED));
+		assertEquals(BankSection.EQUIPMENT, spec.sectionOf(ItemID.SPADE));
+		assertEquals(BankSection.TELEPORTS, spec.sectionOf(ItemID.ECTOPHIAL));
+		assertNull(spec.sectionOf(ItemID.WATERMELON_SEED));
+		assertNull(spec.sectionOf(ItemID.COINS));
+	}
+
+	@Test
+	public void itemListedInTwoSectionsGoesInTheFirst()
+	{
+		// Coconuts pay for magic trees; a coconut is also a teleport nowhere, but say it were
+		BankFilterSpec spec = spec(BankSection.PAYMENTS, List.of(ItemID.COCONUT), BankSection.TELEPORTS, List.of(ItemID.COCONUT));
+
+		assertEquals(BankSection.PAYMENTS, spec.sectionOf(ItemID.COCONUT));
 	}
 
 	@Test
 	public void bankItemsAreArrangedInSectionsUnderAHeadingRow()
 	{
-		BankFilterSpec spec = new BankFilterSpec(true, false, -1, List.of(), List.of(ItemID.ECTOPHIAL));
+		BankFilterSpec spec = spec(
+			BankSection.HERB_SEEDS, RunItems.HERB_SEEDS,
+			BankSection.ALLOTMENT_SEEDS, RunItems.ALLOTMENT_SEEDS,
+			BankSection.EQUIPMENT, RunItems.EQUIPMENT,
+			BankSection.TELEPORTS, List.of(ItemID.ECTOPHIAL));
 		// In bank order, which isn't the order they should be shown in; coins aren't part of the filter
 		List<Integer> bank = List.of(ItemID.ECTOPHIAL, ItemID.TORSTOL_SEED, ItemID.COINS, ItemID.DIBBER, ItemID.GUAM_SEED, ItemID.SPADE, ItemID.POTATO_SEED);
 
 		BankFilterSpec.Arrangement arrangement = spec.arrange(bank);
 
 		int[] expected = new int[8 * 8];
-		java.util.Arrays.fill(expected, -1);
+		Arrays.fill(expected, -1);
 		expected[8] = ItemID.GUAM_SEED;
 		expected[9] = ItemID.TORSTOL_SEED;
 		expected[24] = ItemID.POTATO_SEED;
@@ -69,7 +88,8 @@ public class BankAndRouteTest
 	@Test
 	public void sectionLongerThanARowPushesTheNextOneDown()
 	{
-		BankFilterSpec.Arrangement arrangement = BankFilterSpec.HERBS_ONLY.arrange(
+		BankFilterSpec spec = spec(BankSection.HERB_SEEDS, RunItems.HERB_SEEDS, BankSection.EQUIPMENT, RunItems.EQUIPMENT);
+		BankFilterSpec.Arrangement arrangement = spec.arrange(
 			List.of(ItemID.GUAM_SEED, ItemID.MARRENTILL_SEED, ItemID.TARROMIN_SEED, ItemID.HARRALANDER_SEED, ItemID.RANARR_SEED,
 				ItemID.TOADFLAX_SEED, ItemID.IRIT_SEED, ItemID.AVANTOE_SEED, ItemID.KWUARM_SEED, ItemID.RAKE));
 
@@ -83,56 +103,68 @@ public class BankAndRouteTest
 	@Test
 	public void emptyBankGivesAnEmptyLayout()
 	{
-		BankFilterSpec.Arrangement arrangement = BankFilterSpec.HERBS_ONLY.arrange(List.of(ItemID.COINS));
+		BankFilterSpec.Arrangement arrangement = spec(BankSection.HERB_SEEDS, RunItems.HERB_SEEDS).arrange(List.of(ItemID.COINS));
 
 		assertEquals(0, arrangement.getSlots().length);
 		assertTrue(arrangement.getHeadingRows().isEmpty());
 	}
 
-	private static Route route(Map<FarmLocation, Map<Integer, Integer>> stops, boolean carriedOnly, boolean house, boolean spells)
+	private static Route route(RunType runType, Map<FarmLocation, List<Map<Integer, Integer>>> stops, boolean carriedOnly,
+		boolean house, boolean spells)
 	{
-		return new Route(stops, carriedOnly, house, spells, Set.of());
+		return new Route(runType, stops, carriedOnly, house, spells, Set.of());
 	}
 
 	@Test
 	public void pathMessageTargetsPlainPointsWithoutSeedRequirements()
 	{
-		Map<FarmLocation, Map<Integer, Integer>> stops = new LinkedHashMap<>();
-		stops.put(FarmLocation.FALADOR, Map.of());
-		stops.put(FarmLocation.WEISS, Map.of());
+		Map<FarmLocation, List<Map<Integer, Integer>>> stops = new LinkedHashMap<>();
+		stops.put(FarmLocation.FALADOR, List.of());
+		stops.put(FarmLocation.WEISS, List.of());
 
-		Map<String, Object> data = ShortestPathRouter.pathMessage(route(stops, false, false, false));
+		Map<String, Object> data = ShortestPathRouter.pathMessage(route(RunType.HERB, stops, false, false, false));
 
-		assertEquals(List.of(FarmLocation.FALADOR.getPoint(), FarmLocation.WEISS.getPoint()), data.get("target"));
+		assertEquals(List.of(new WorldPoint(3058, 3311, 0), new WorldPoint(2848, 3934, 0)), data.get("target"));
 		assertNull(data.get("config"));
 	}
 
 	@Test
 	@SuppressWarnings("unchecked")
-	public void pathMessagePassesEachStopsSeedRequirement()
+	public void pathMessagePassesEachStopsSeedRequirements()
 	{
-		Map<FarmLocation, Map<Integer, Integer>> stops = new LinkedHashMap<>();
-		stops.put(FarmLocation.FARMING_GUILD, Map.of(ItemID.IRIT_SEED, 1));
-		stops.put(FarmLocation.WEISS, Map.of());
+		Map<FarmLocation, List<Map<Integer, Integer>>> stops = new LinkedHashMap<>();
+		stops.put(FarmLocation.FARMING_GUILD, List.of(Map.of(ItemID.IRIT_SEED, 1)));
+		stops.put(FarmLocation.WEISS, List.of());
 
-		List<Object> targets = (List<Object>) ShortestPathRouter.pathMessage(route(stops, false, false, false)).get("target");
+		List<Object> targets = (List<Object>) ShortestPathRouter.pathMessage(route(RunType.HERB, stops, false, false, false)).get("target");
 
 		assertEquals(2, targets.size());
 		Map<String, Object> guild = (Map<String, Object>) targets.get(0);
-		assertEquals(FarmLocation.FARMING_GUILD.getPoint(), guild.get("point"));
-		assertEquals(Map.of(ItemID.IRIT_SEED, 1), guild.get("requirements"));
-		assertEquals(FarmLocation.WEISS.getPoint(), targets.get(1));
+		assertEquals(FarmLocation.FARMING_GUILD.herbPatch().getPoint(), guild.get("point"));
+		assertEquals(List.of(Map.of(ItemID.IRIT_SEED, 1)), guild.get("requirements"));
+		assertEquals(FarmLocation.WEISS.herbPatch().getPoint(), targets.get(1));
+	}
+
+	@Test
+	@SuppressWarnings("unchecked")
+	public void treeRunGoesToTheGuildsTreeRatherThanItsHerbPatch()
+	{
+		Map<FarmLocation, List<Map<Integer, Integer>>> stops = Map.of(FarmLocation.FARMING_GUILD, List.of());
+
+		List<Object> targets = (List<Object>) ShortestPathRouter.pathMessage(route(RunType.TREE, stops, false, false, false)).get("target");
+
+		assertEquals(List.of(new WorldPoint(1232, 3736, 0)), targets);
 	}
 
 	@Test
 	public void pathMessageOnlyOverridesTheShortestPathSettingsItNeeds()
 	{
-		Map<FarmLocation, Map<Integer, Integer>> stops = Map.of(FarmLocation.FALADOR, Map.of());
+		Map<FarmLocation, List<Map<Integer, Integer>>> stops = Map.of(FarmLocation.FALADOR, List.of());
 
 		assertEquals(Map.of("useTeleportationItems", "Inventory"),
-			ShortestPathRouter.pathMessage(route(stops, true, false, false)).get("config"));
+			ShortestPathRouter.pathMessage(route(RunType.HERB, stops, true, false, false)).get("config"));
 		assertEquals(Map.of("usePoh", true, "useTeleportationSpells", true),
-			ShortestPathRouter.pathMessage(route(stops, false, true, true)).get("config"));
+			ShortestPathRouter.pathMessage(route(RunType.HERB, stops, false, true, true)).get("config"));
 	}
 
 	@Test
@@ -140,8 +172,10 @@ public class BankAndRouteTest
 	{
 		assertEquals(FarmingContract.IRIT, FarmingContract.fromVarbit(26));
 		assertEquals(FarmingContract.WATERMELON, FarmingContract.fromVarbit(46));
-		// A tree contract isn't one a run grows
-		assertNull(FarmingContract.fromVarbit(9));
+		assertEquals(FarmingContract.MAGIC, FarmingContract.fromVarbit(11));
+		assertEquals(FarmingContract.DRAGONFRUIT, FarmingContract.fromVarbit(19));
+		// A bush contract isn't one a run grows
+		assertNull(FarmingContract.fromVarbit(1));
 		for (FarmingContract contract : FarmingContract.values())
 		{
 			assertTrue(contract.getType().getSeeds().contains(contract.getSeed()));
@@ -154,14 +188,31 @@ public class BankAndRouteTest
 		Set<String> keys = new HashSet<>();
 		for (FarmLocation location : FarmLocation.values())
 		{
-			assertEquals(PatchType.HERB, location.herbPatch().getType());
 			for (FarmPatch patch : location.getPatches())
 			{
 				assertTrue(patch.toString(), keys.add(patch.timeTrackingKey()));
 			}
 		}
-		// Seven locations with two allotments and a flower patch, Harmony with one allotment, and two with a herb patch alone
-		assertEquals(7 * 4 + 2 + 2, keys.size());
+		// Herb runs: seven locations with two allotments and a flower patch, Harmony with one allotment,
+		// and two with a herb patch alone. Tree runs: seven trees and seven fruit trees.
+		assertEquals(7 * 4 + 2 + 2 + 7 + 7, keys.size());
+	}
+
+	@Test
+	public void eachRunHasItsLocations()
+	{
+		assertEquals(10, FarmLocation.of(RunType.HERB).size());
+		// The guild and the Gnome Stronghold each have a tree and a fruit tree
+		assertEquals(12, FarmLocation.of(RunType.TREE).size());
+		assertTrue(FarmLocation.of(RunType.TREE).contains(FarmLocation.FARMING_GUILD));
+		assertFalse(FarmLocation.of(RunType.HERB).contains(FarmLocation.LUMBRIDGE));
+		for (FarmLocation location : FarmLocation.of(RunType.TREE))
+		{
+			for (FarmPatch tree : location.anchors(RunType.TREE))
+			{
+				assertTrue(tree.toString(), tree.getGardener() > 0);
+			}
+		}
 	}
 
 	@Test
@@ -187,6 +238,12 @@ public class BankAndRouteTest
 		assertEquals(List.of(), FarmLocation.MORYTANIA.teleportsFor(Teleport.NONE));
 		// A teleport that doesn't go here counts as no preference
 		assertEquals(List.of(Teleport.ECTOPHIAL, Teleport.FENKENSTRAIN_TAB), FarmLocation.MORYTANIA.teleportsFor(Teleport.ICY_BASALT));
+	}
+
+	@Test
+	public void brimhavenCanBeReachedThroughArdougne()
+	{
+		assertTrue(FarmLocation.BRIMHAVEN.getTeleports().containsAll(List.of(Teleport.ARDOUGNE_TAB, Teleport.ARDOUGNE_SPELL)));
 	}
 
 	@Test

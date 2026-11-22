@@ -1,5 +1,6 @@
 package com.ironmanfarmrun;
 
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import lombok.Value;
@@ -12,10 +13,15 @@ import lombok.Value;
 class Route
 {
 	/**
-	 * The locations left to visit, each with the seeds the player needs on arrival: any one of the
-	 * item ids, at least that many. An empty map means no requirement, so no bank detour.
+	 * Which point of each location the route leads to.
 	 */
-	Map<FarmLocation, Map<Integer, Integer>> stops;
+	RunType runType;
+	/**
+	 * The locations left to visit, each with the seeds the player needs on arrival. Each map is "any
+	 * one of these item ids, at least that many", and every map in the list is needed. An empty list
+	 * means no requirement, so no bank detour.
+	 */
+	Map<FarmLocation, List<Map<Integer, Integer>>> stops;
 	/**
 	 * Only let the route use teleport items the player is carrying, whatever their Shortest Path
 	 * settings say, so it follows the teleports they chose to bring.

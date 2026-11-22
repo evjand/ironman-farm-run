@@ -164,4 +164,37 @@ public class PatchDecoderTest
 	{
 		return PatchDecoder.predict(type, stored, now, null, null);
 	}
+
+	@Test
+	public void treeGrowsToItsHealthCheckThenStandsUntilRemoved()
+	{
+		// 1,000,000 is 1,600 seconds into a 40 minute growth tick that started at 998,400; 8 is a freshly planted oak
+		long treeTick = 998_400;
+		assertEquals(new PatchState(PatchStatus.GROWING, treeTick + 4 * 40 * MINUTE, Sapling.OAK),
+			predict(PatchType.TREE, "8:" + SEEN_AT, SEEN_AT));
+		assertEquals(new PatchState(PatchStatus.CHECK_HEALTH, 0, Sapling.OAK),
+			predict(PatchType.TREE, "8:" + SEEN_AT, treeTick + 4 * 40 * MINUTE));
+		assertEquals(new PatchState(PatchStatus.CHECK_HEALTH, 0, Sapling.OAK), predict(PatchType.TREE, "12:" + SEEN_AT, SEEN_AT));
+		assertEquals(new PatchState(PatchStatus.GROWN, 0, Sapling.OAK), predict(PatchType.TREE, "13:" + SEEN_AT, SEEN_AT));
+		assertEquals(new PatchState(PatchStatus.STUMP, 0, Sapling.OAK), predict(PatchType.TREE, "14:" + SEEN_AT, SEEN_AT));
+		assertEquals(new PatchState(PatchStatus.CHECK_HEALTH, 0, Sapling.MAGIC), predict(PatchType.TREE, "60:" + SEEN_AT, SEEN_AT));
+		assertEquals(PatchStatus.DISEASED, predict(PatchType.TREE, "113:" + SEEN_AT, SEEN_AT).getStatus());
+		assertEquals(PatchStatus.DEAD, predict(PatchType.TREE, "177:" + SEEN_AT, SEEN_AT).getStatus());
+		assertEquals(new PatchState(PatchStatus.WEEDS, 0), predict(PatchType.TREE, "0:" + SEEN_AT, SEEN_AT));
+	}
+
+	@Test
+	public void fruitTreeWithFruitCountsAsGrown()
+	{
+		// 34 is an apple tree waiting for its health check; 14 to 20 are apple trees with 0 to 6 apples
+		assertEquals(new PatchState(PatchStatus.CHECK_HEALTH, 0, Sapling.APPLE), predict(PatchType.FRUIT_TREE, "34:" + SEEN_AT, SEEN_AT));
+		for (int value = 14; value <= 20; value++)
+		{
+			assertEquals(new PatchState(PatchStatus.GROWN, 0, Sapling.APPLE), predict(PatchType.FRUIT_TREE, value + ":" + SEEN_AT, SEEN_AT));
+		}
+		assertEquals(new PatchState(PatchStatus.STUMP, 0, Sapling.APPLE), predict(PatchType.FRUIT_TREE, "33:" + SEEN_AT, SEEN_AT));
+		assertEquals(new PatchState(PatchStatus.CHECK_HEALTH, 0, Sapling.DRAGONFRUIT), predict(PatchType.FRUIT_TREE, "253:" + SEEN_AT, SEEN_AT));
+		// A fruit tree takes six 160 minute ticks
+		assertEquals(PatchStatus.GROWING, predict(PatchType.FRUIT_TREE, "8:" + SEEN_AT, SEEN_AT).getStatus());
+	}
 }

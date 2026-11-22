@@ -18,6 +18,7 @@ class PatchTracker
 	private static final String FARM_TICK_OFFSET = "farmTickOffset";
 	private static final String FARM_TICK_OFFSET_PRECISION = "farmTickOffsetPrecision";
 	private static final String COMPOST_SUFFIX = ".compost";
+	private static final String PROTECTED_SUFFIX = ".protected";
 
 	private final ConfigManager configManager;
 
@@ -50,17 +51,32 @@ class PatchTracker
 	 */
 	Set<FarmPatch> readComposted()
 	{
-		Set<FarmPatch> composted = new HashSet<>();
+		return readMarked(COMPOST_SUFFIX);
+	}
+
+	/**
+	 * The trees Time Tracking has seen a gardener paid to protect. It notes this when the payment is
+	 * made and forgets it when the tree is harvested or dies.
+	 */
+	Set<FarmPatch> readProtected()
+	{
+		return readMarked(PROTECTED_SUFFIX);
+	}
+
+	private Set<FarmPatch> readMarked(String suffix)
+	{
+		Set<FarmPatch> marked = new HashSet<>();
 		for (FarmLocation location : FarmLocation.values())
 		{
 			for (FarmPatch patch : location.getPatches())
 			{
-				if (configManager.getRSProfileConfiguration(TIME_TRACKING_GROUP, patch.timeTrackingKey() + COMPOST_SUFFIX) != null)
+				String value = configManager.getRSProfileConfiguration(TIME_TRACKING_GROUP, patch.timeTrackingKey() + suffix);
+				if (value != null && !"false".equals(value))
 				{
-					composted.add(patch);
+					marked.add(patch);
 				}
 			}
 		}
-		return composted;
+		return marked;
 	}
 }

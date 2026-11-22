@@ -30,6 +30,8 @@ import net.runelite.api.GameObject;
 import net.runelite.api.GameState;
 import net.runelite.api.Item;
 import net.runelite.api.ItemContainer;
+import net.runelite.api.NPC;
+import net.runelite.api.Skill;
 import net.runelite.api.coords.WorldPoint;
 import net.runelite.api.events.GameStateChanged;
 import net.runelite.api.events.GameTick;
@@ -45,6 +47,7 @@ import net.runelite.client.eventbus.EventBus;
 import net.runelite.client.eventbus.Subscribe;
 import net.runelite.client.events.ConfigChanged;
 import net.runelite.client.events.RuneScapeProfileChanged;
+import net.runelite.client.game.ItemManager;
 import net.runelite.client.game.ItemVariationMapping;
 import net.runelite.client.plugins.Plugin;
 import net.runelite.client.plugins.PluginDependency;
@@ -59,8 +62,8 @@ import net.runelite.client.ui.overlay.OverlayManager;
 @Slf4j
 @PluginDescriptor(
 	name = "Ironman Farm Run",
-	description = "Farm run helper: patch states from Time Tracking, routes from Shortest Path, a bank filter and step-by-step patch highlights",
-	tags = {"farming", "farm run", "herb run", "ironman", "herbs", "allotment", "flower", "contract"}
+	description = "Herb and tree run helper: patch states from Time Tracking, routes from Shortest Path, a bank filter and step-by-step patch highlights",
+	tags = {"farming", "farm run", "herb run", "tree run", "ironman", "herbs", "trees", "allotment", "flower", "contract"}
 )
 @PluginDependency(BankTagsPlugin.class)
 public class IronmanFarmRunPlugin extends Plugin implements IronmanFarmRunPanel.Listener
@@ -68,9 +71,11 @@ public class IronmanFarmRunPlugin extends Plugin implements IronmanFarmRunPanel.
 	private static final String TIME_TRACKING_PLUGIN = "Time Tracking";
 	private static final String SHORTEST_PATH_PLUGIN = "Shortest Path";
 
-	// Per-account choices for a location; each key ends in the location's enum name
+	// Per-account choices for a location; each key ends in the location's enum name, and those for
+	// tree runs start with the tree prefix
 	private static final String ENABLED_KEY_PREFIX = "patch.";
 	private static final String TELEPORT_KEY_PREFIX = "teleport.";
+	private static final String TREE_KEY_PREFIX = "tree.";
 
 	/**
 	 * Which plugins are on rarely changes and takes a walk over every plugin to find out.
@@ -80,6 +85,11 @@ public class IronmanFarmRunPlugin extends Plugin implements IronmanFarmRunPanel.
 	 * How far past a location's patches the player can wander and still count as being there.
 	 */
 	private static final int LEAVING_SLACK = 15;
+	/**
+	 * How long a stop has to have nothing left to do before it counts as done. Arriving at a patch
+	 * can show its state wrongly for a moment before the game catches up.
+	 */
+	private static final int SETTLE_TICKS = 3;
 
 	private static final int[] RUNE_POUCH_TYPES = {
 		VarbitID.RUNE_POUCH_TYPE_1, VarbitID.RUNE_POUCH_TYPE_2, VarbitID.RUNE_POUCH_TYPE_3,
@@ -112,6 +122,9 @@ public class IronmanFarmRunPlugin extends Plugin implements IronmanFarmRunPanel.
 	private OverlayManager overlayManager;
 
 	@Inject
+	private ItemManager itemManager;
+
+	@Inject
 	private IronmanFarmRunConfig config;
 
 	@Inject
@@ -119,6 +132,9 @@ public class IronmanFarmRunPlugin extends Plugin implements IronmanFarmRunPanel.
 
 	@Inject
 	private PatchObjects patchObjects;
+
+	@Inject
+	private Gardeners gardeners;
 
 	@Inject
 	private ShortestPathRouter router;
@@ -144,9 +160,10 @@ public class IronmanFarmRunPlugin extends Plugin implements IronmanFarmRunPanel.
 
 	// Run state, only touched on the client thread
 	private boolean runActive;
+	private RunType activeRunType = RunType.HERB;
 	/**
-	 * The locations the run visits, fixed when it starts: those whose herb patch needed attention then.
-	 * Each is visited once, so a patch that turns ready later doesn't send the player back.
+	 * The locations the run visits, fixed when it starts: those whose anchor patches needed attention
+	 * then. Each is visited once, so a patch that turns ready later doesn't send the player back.
 	 */
 	private final Set<FarmLocation> runStops = EnumSet.noneOf(FarmLocation.class);
 	private final Set<FarmLocation> completedStops = EnumSet.noneOf(FarmLocation.class);
@@ -154,6 +171,10 @@ public class IronmanFarmRunPlugin extends Plugin implements IronmanFarmRunPanel.
 	 * Stops the player has been at on this run, to notice them leaving.
 	 */
 	private final Set<FarmLocation> reachedStops = EnumSet.noneOf(FarmLocation.class);
+	/**
+	 * The game tick since which each remaining stop has had nothing left to do.
+	 */
+	private final Map<FarmLocation, Integer> idleSince = new EnumMap<>(FarmLocation.class);
 	/**
 	 * What the shown path was asked for with, or null if no path has been asked for this run.
 	 */
@@ -164,9 +185,10 @@ public class IronmanFarmRunPlugin extends Plugin implements IronmanFarmRunPanel.
 	 */
 	private final Map<FarmPatch, PatchStatus> previousStatuses = new HashMap<>();
 	/**
-	 * Patches planted on this run that haven't had compost yet, while the player is still beside them.
+	 * Patches planted on this run, while the player is still beside them: they can still be composted
+	 * and their gardener paid.
 	 */
-	private final Set<FarmPatch> awaitingCompost = new HashSet<>();
+	private final Set<FarmPatch> justPlanted = new HashSet<>();
 	private PanelState lastPanelState;
 	private int ticks;
 	private boolean timeTrackingActive;
@@ -196,12 +218,14 @@ public class IronmanFarmRunPlugin extends Plugin implements IronmanFarmRunPanel.
 		overlayManager.add(itemHighlightOverlay);
 		overlayManager.add(checklistOverlay);
 		eventBus.register(patchObjects);
+		eventBus.register(gardeners);
 		eventBus.register(bankFilter);
 
 		clientThread.invokeLater(() ->
 		{
 			bankFilter.register();
 			patchObjects.scan();
+			gardeners.scan();
 			checkPlugins();
 			refresh();
 		});
@@ -215,6 +239,7 @@ public class IronmanFarmRunPlugin extends Plugin implements IronmanFarmRunPanel.
 		overlayManager.remove(itemHighlightOverlay);
 		overlayManager.remove(checklistOverlay);
 		eventBus.unregister(patchObjects);
+		eventBus.unregister(gardeners);
 		eventBus.unregister(bankFilter);
 
 		clientThread.invokeLater(() ->
@@ -222,7 +247,8 @@ public class IronmanFarmRunPlugin extends Plugin implements IronmanFarmRunPanel.
 			endRun();
 			bankFilter.unregister();
 			patchObjects.clear();
-			patchOverlay.setHighlights(List.of());
+			gardeners.clear();
+			patchOverlay.setHighlights(List.of(), List.of());
 			itemHighlightOverlay.setItems(Map.of());
 			checklistOverlay.setContent(null);
 			previousStatuses.clear();
@@ -300,17 +326,21 @@ public class IronmanFarmRunPlugin extends Plugin implements IronmanFarmRunPanel.
 				return;
 			}
 
-			Set<FarmLocation> stops = herbStops(patchTracker.readStates(Instant.now().getEpochSecond()), locationSettings());
+			RunType runType = config.runType();
+			Set<FarmLocation> stops = stopsFor(runType, patchTracker.readStates(Instant.now().getEpochSecond()),
+				locationSettings(runType), farmingLevel());
 			if (stops.isEmpty())
 			{
 				return;
 			}
 
 			runActive = true;
+			activeRunType = runType;
 			runStops.clear();
 			runStops.addAll(stops);
 			completedStops.clear();
 			reachedStops.clear();
+			idleSince.clear();
 			route = null;
 			refresh();
 
@@ -342,6 +372,20 @@ public class IronmanFarmRunPlugin extends Plugin implements IronmanFarmRunPanel.
 	}
 
 	@Override
+	public void skipStop(FarmLocation location)
+	{
+		clientThread.invoke(() ->
+		{
+			if (runActive && runStops.contains(location))
+			{
+				// For when a stop can't be finished, such as a patch the player can't get to
+				completedStops.add(location);
+				refresh();
+			}
+		});
+	}
+
+	@Override
 	public void setLocationSettings(FarmLocation location, LocationSettings settings)
 	{
 		clientThread.invoke(() ->
@@ -353,9 +397,10 @@ public class IronmanFarmRunPlugin extends Plugin implements IronmanFarmRunPanel.
 
 			// Saved per account, as accounts differ in what they have unlocked.
 			// The config changes these post trigger the refresh.
+			String prefix = keyPrefix(runType());
 			String name = location.name();
-			configManager.setRSProfileConfiguration(IronmanFarmRunConfig.GROUP, ENABLED_KEY_PREFIX + name, settings.isEnabled());
-			configManager.setRSProfileConfiguration(IronmanFarmRunConfig.GROUP, TELEPORT_KEY_PREFIX + name, settings.getTeleport().name());
+			configManager.setRSProfileConfiguration(IronmanFarmRunConfig.GROUP, prefix + ENABLED_KEY_PREFIX + name, settings.isEnabled());
+			configManager.setRSProfileConfiguration(IronmanFarmRunConfig.GROUP, prefix + TELEPORT_KEY_PREFIX + name, settings.getTeleport().name());
 		});
 	}
 
@@ -366,39 +411,58 @@ public class IronmanFarmRunPlugin extends Plugin implements IronmanFarmRunPanel.
 		configManager.setConfiguration(IronmanFarmRunConfig.GROUP, option.getConfigKey(), on);
 	}
 
+	@Override
+	public void setRunType(RunType runType)
+	{
+		configManager.setConfiguration(IronmanFarmRunConfig.GROUP, IronmanFarmRunConfig.RUN_TYPE, runType);
+	}
+
+	/**
+	 * The kind of run in progress, or the one the player has picked.
+	 */
+	private RunType runType()
+	{
+		return runActive ? activeRunType : config.runType();
+	}
+
 	/**
 	 * Re-reads everything, moves the run along, and updates the overlays and panel.
 	 */
 	private void refresh()
 	{
+		RunType runType = runType();
 		boolean loggedIn = client.getGameState() == GameState.LOGGED_IN;
 		long now = Instant.now().getEpochSecond();
 		Map<FarmPatch, PatchState> patches = patchTracker.readStates(now);
 		Set<FarmPatch> composted = patchTracker.readComposted();
-		Map<FarmLocation, LocationSettings> settings = locationSettings();
+		Set<FarmPatch> protectedTrees = patchTracker.readProtected();
+		Map<FarmLocation, LocationSettings> settings = locationSettings(runType);
 		Carried carried = carried();
 		WorldPoint playerPoint = loggedIn && client.getLocalPlayer() != null ? client.getLocalPlayer().getWorldLocation() : null;
 		FarmingContract contract = loggedIn ? contract() : null;
+		int farmingLevel = farmingLevel();
 
-		updateAwaitingCompost(patches, composted, playerPoint);
+		updateJustPlanted(patches, playerPoint);
 
 		// The checklist goes by what the player wants; the steps by what they can do with what they carry
-		RunPlan.Options wantedOptions = new RunPlan.Options(config.allotments(), config.flowers(), config.compostStep());
+		RunPlan.Options wantedOptions = new RunPlan.Options(runType, config.allotments(), config.flowers(),
+			config.compostStep(), config.protectTrees(), farmingLevel);
 		boolean carryingCompost = carried.has(ItemID.BOTTOMLESS_COMPOST_BUCKET_FILLED) || carried.hasAny(RunItems.COMPOST_BUCKETS);
-		RunPlan.Options options = new RunPlan.Options(config.allotments(), config.flowers(), config.compostStep() && carryingCompost);
+		RunPlan.Options options = new RunPlan.Options(runType, config.allotments(), config.flowers(),
+			config.compostStep() && carryingCompost, config.protectTrees(), farmingLevel);
 
-		List<FarmLocation> stops = orderedStops(runActive ? remainingStops() : herbStops(patches, settings), playerPoint);
-		RunPlan plan = RunPlan.of(stops, patches, composted, awaitingCompost, options, carried, contract);
-		if (runActive && playerPoint != null && updateCompletedStops(plan, playerPoint))
+		List<FarmLocation> stops = orderedStops(runActive ? remainingStops() : stopsFor(runType, patches, settings, farmingLevel), playerPoint);
+		RunPlan plan = RunPlan.of(stops, patches, composted, protectedTrees, justPlanted, options, carried, contract);
+		if (runActive && playerPoint != null && updateCompletedStops(runType, plan, playerPoint, farmingLevel))
 		{
 			stops = orderedStops(remainingStops(), playerPoint);
-			plan = RunPlan.of(stops, patches, composted, awaitingCompost, options, carried, contract);
+			plan = RunPlan.of(stops, patches, composted, protectedTrees, justPlanted, options, carried, contract);
 		}
 		RunPlan wanted = options.equals(wantedOptions)
 			? plan
-			: RunPlan.of(stops, patches, composted, awaitingCompost, wantedOptions, carried, contract);
+			: RunPlan.of(stops, patches, composted, protectedTrees, justPlanted, wantedOptions, carried, contract);
 
-		bankFilter.setSpec(bankFilterSpec(settings, stops, contract));
+		bankFilter.setSpec(bankFilterSpec(runType, settings, stops, contract));
 
 		// Patch data is per account and unavailable between worlds, so only judge the run while logged in
 		if (runActive && loggedIn)
@@ -406,11 +470,12 @@ public class IronmanFarmRunPlugin extends Plugin implements IronmanFarmRunPanel.
 			if (stops.isEmpty())
 			{
 				endRun();
-				client.addChatMessage(ChatMessageType.GAMEMESSAGE, "", "Farm run complete.", null);
+				client.addChatMessage(ChatMessageType.GAMEMESSAGE, "",
+					Character.toUpperCase(runType.getNoun().charAt(0)) + runType.getNoun().substring(1) + " complete.", null);
 			}
 			else
 			{
-				Route wantedRoute = route(stops, plan, settings, carried);
+				Route wantedRoute = route(runType, stops, plan, settings, carried);
 				if (!wantedRoute.equals(route))
 				{
 					router.show(wantedRoute);
@@ -419,14 +484,14 @@ public class IronmanFarmRunPlugin extends Plugin implements IronmanFarmRunPanel.
 			}
 		}
 
-		List<ChecklistItem> checklist = Checklist.build(wanted, settings, carried,
-			new Checklist.Options(config.allotments(), config.flowers(), config.compostStep(), config.volcanicAsh(),
-				config.graceful() ? gracefulPieces : List.of()),
+		List<ChecklistItem> checklist = Checklist.build(wanted, patches, settings, carried,
+			new Checklist.Options(runType, config.allotments(), config.flowers(), config.compostStep(), config.protectTrees(),
+				config.volcanicAsh(), config.graceful() ? gracefulPieces : List.of()),
 			contract);
 
-		patchOverlay.setHighlights(highlights(plan, contract));
-		itemHighlightOverlay.setItems(itemHighlights(plan, playerPoint));
-		checklistOverlay.setContent(overlayContent(loggedIn, plan, patches, stops, checklist, playerPoint, options, contract));
+		updateHighlights(plan, patches, contract);
+		itemHighlightOverlay.setItems(itemHighlights(plan, patches, playerPoint));
+		checklistOverlay.setContent(overlayContent(runType, loggedIn, plan, patches, stops, checklist, playerPoint, options, contract));
 
 		Set<RunOption> runOptions = EnumSet.noneOf(RunOption.class);
 		for (RunOption option : RunOption.values())
@@ -437,8 +502,8 @@ public class IronmanFarmRunPlugin extends Plugin implements IronmanFarmRunPanel.
 			}
 		}
 
-		PanelState state = new PanelState(loggedIn, runActive, patches, settings, new LinkedHashSet<>(stops), checklist, runOptions,
-			contract == null ? null : contract.seedLabel() + " at the Farming Guild", now / 60,
+		PanelState state = new PanelState(loggedIn, runActive, runType, patches, settings, new LinkedHashSet<>(stops), checklist,
+			runOptions, contract == null ? null : contract.seedLabel() + " at the Farming Guild", farmingLevel, now / 60,
 			timeTrackingActive, shortestPathActive, bankTagsActive);
 		if (!state.equals(lastPanelState))
 		{
@@ -448,17 +513,37 @@ public class IronmanFarmRunPlugin extends Plugin implements IronmanFarmRunPanel.
 	}
 
 	/**
-	 * The enabled locations whose herb patch needs attention, which are the stops a run would make.
+	 * The player's Farming level, boosts included, as a boost is enough to get into the Farming Guild's
+	 * wings. Without a player to ask, every patch counts as reachable.
 	 */
-	private static Set<FarmLocation> herbStops(Map<FarmPatch, PatchState> patches, Map<FarmLocation, LocationSettings> settings)
+	private int farmingLevel()
+	{
+		if (client.getGameState() != GameState.LOGGED_IN)
+		{
+			return Integer.MAX_VALUE;
+		}
+		return Math.max(client.getRealSkillLevel(Skill.FARMING), client.getBoostedSkillLevel(Skill.FARMING));
+	}
+
+	/**
+	 * The enabled locations whose anchor patches need attention, which are the stops a run would make.
+	 */
+	private static Set<FarmLocation> stopsFor(RunType runType, Map<FarmPatch, PatchState> patches,
+		Map<FarmLocation, LocationSettings> settings, int farmingLevel)
 	{
 		Set<FarmLocation> stops = EnumSet.noneOf(FarmLocation.class);
-		for (FarmLocation location : FarmLocation.values())
+		for (FarmLocation location : FarmLocation.of(runType))
 		{
-			if (settings.get(location).isEnabled()
-				&& patches.getOrDefault(location.herbPatch(), PatchState.UNKNOWN).getStatus().needsVisit())
+			if (!settings.get(location).isEnabled())
 			{
-				stops.add(location);
+				continue;
+			}
+			for (FarmPatch anchor : location.anchors(runType, farmingLevel))
+			{
+				if (patches.getOrDefault(anchor, PatchState.UNKNOWN).getStatus().needsVisit())
+				{
+					stops.add(location);
+				}
 			}
 		}
 		return stops;
@@ -493,13 +578,14 @@ public class IronmanFarmRunPlugin extends Plugin implements IronmanFarmRunPanel.
 	}
 
 	/**
-	 * A stop is done once its herb patch is, and either nothing else there needs doing or the player
-	 * has moved on.
+	 * A stop is done once its anchor patches are, and either nothing else there has needed doing for
+	 * a few ticks or the player has moved on.
 	 *
 	 * @return whether any stop was completed
 	 */
-	private boolean updateCompletedStops(RunPlan plan, WorldPoint playerPoint)
+	private boolean updateCompletedStops(RunType runType, RunPlan plan, WorldPoint playerPoint, int farmingLevel)
 	{
+		int tick = client.getTickCount();
 		boolean changed = false;
 		for (FarmLocation location : remainingStops())
 		{
@@ -508,11 +594,22 @@ public class IronmanFarmRunPlugin extends Plugin implements IronmanFarmRunPanel.
 				reachedStops.add(location);
 			}
 
-			boolean herbDone = !plan.getSteps().containsKey(location.herbPatch());
+			if (plan.hasSteps(location))
+			{
+				idleSince.remove(location);
+			}
+			else
+			{
+				idleSince.putIfAbsent(location, tick);
+			}
+
+			boolean anchorsDone = location.anchors(runType, farmingLevel).stream().noneMatch(plan.getSteps()::containsKey);
 			boolean left = reachedStops.contains(location) && !location.isNear(playerPoint, LEAVING_SLACK);
-			if (herbDone && (!plan.hasSteps(location) || left))
+			boolean settled = idleSince.containsKey(location) && tick - idleSince.get(location) >= SETTLE_TICKS;
+			if (anchorsDone && (settled || left))
 			{
 				completedStops.add(location);
+				idleSince.remove(location);
 				changed = true;
 			}
 		}
@@ -520,14 +617,14 @@ public class IronmanFarmRunPlugin extends Plugin implements IronmanFarmRunPanel.
 	}
 
 	/**
-	 * Compost can go on after planting, but a planted patch is otherwise done. So a patch planted on
-	 * this run keeps a compost step for as long as the player stays beside it.
+	 * A planted patch is otherwise done, but can still be composted and its gardener paid. So a patch
+	 * planted on this run keeps those steps for as long as the player stays beside it.
 	 */
-	private void updateAwaitingCompost(Map<FarmPatch, PatchState> patches, Set<FarmPatch> composted, @Nullable WorldPoint playerPoint)
+	private void updateJustPlanted(Map<FarmPatch, PatchState> patches, @Nullable WorldPoint playerPoint)
 	{
 		if (!runActive || playerPoint == null)
 		{
-			awaitingCompost.clear();
+			justPlanted.clear();
 			if (playerPoint == null)
 			{
 				previousStatuses.clear();
@@ -538,17 +635,14 @@ public class IronmanFarmRunPlugin extends Plugin implements IronmanFarmRunPanel.
 		{
 			PatchStatus status = entry.getValue().getStatus();
 			PatchStatus previous = playerPoint == null ? null : previousStatuses.put(entry.getKey(), status);
-			boolean justPlanted = status == PatchStatus.GROWING
-				&& (previous == PatchStatus.EMPTY || previous == PatchStatus.WEEDS || previous == PatchStatus.READY || previous == PatchStatus.DEAD);
-			if (runActive && justPlanted)
+			if (runActive && status == PatchStatus.GROWING && previous != null && previous.leadsToReplanting())
 			{
-				awaitingCompost.add(entry.getKey());
+				justPlanted.add(entry.getKey());
 			}
 		}
 
-		awaitingCompost.removeIf(patch ->
+		justPlanted.removeIf(patch ->
 			patches.get(patch).getStatus() != PatchStatus.GROWING
-				|| composted.contains(patch)
 				|| playerPoint == null
 				|| !patch.getLocation().isNear(playerPoint, LEAVING_SLACK));
 	}
@@ -564,27 +658,26 @@ public class IronmanFarmRunPlugin extends Plugin implements IronmanFarmRunPanel.
 		return FarmingContract.fromVarbit(client.getVarbitValue(VarbitID.FARMGUILD_CONTRACT_TYPE));
 	}
 
-	private Route route(List<FarmLocation> stops, RunPlan plan, Map<FarmLocation, LocationSettings> settings, Carried carried)
+	private Route route(RunType runType, List<FarmLocation> stops, RunPlan plan, Map<FarmLocation, LocationSettings> settings,
+		Carried carried)
 	{
 		boolean requireSeeds = config.bankDetourForSeeds() && !carried.hasAny(RunItems.SEED_BOXES);
-		Map<Integer, Integer> anyHerbSeed = new HashMap<>();
-		for (int seed : PatchType.HERB.getSeeds())
-		{
-			anyHerbSeed.put(seed, 1);
-		}
 
-		Map<FarmLocation, Map<Integer, Integer>> routeStops = new LinkedHashMap<>();
+		Map<FarmLocation, List<Map<Integer, Integer>>> routeStops = new LinkedHashMap<>();
 		boolean useHouse = false;
 		boolean useSpells = false;
 		for (FarmLocation location : stops)
 		{
-			// The herb seed is what makes the stop worth it; a contract stop needs the contract's seed
-			Map<Integer, Integer> seeds = Map.of();
-			FarmPatch herb = location.herbPatch();
-			if (requireSeeds && plan.getToPlant().contains(herb))
+			// The anchors' seeds are what make the stop worth it; a contract patch needs the contract's
+			List<Map<Integer, Integer>> seeds = new ArrayList<>();
+			Set<PatchType> covered = EnumSet.noneOf(PatchType.class);
+			for (FarmPatch anchor : location.anchors(runType))
 			{
-				Integer contractSeed = plan.getContractSeeds().get(herb);
-				seeds = contractSeed != null ? Map.of(contractSeed, 1) : anyHerbSeed;
+				if (requireSeeds && plan.getToPlant().contains(anchor) && covered.add(anchor.getType()))
+				{
+					Integer contractSeed = plan.getContractSeeds().get(anchor);
+					seeds.add(contractSeed != null ? Map.of(contractSeed, 1) : anySeed(anchor.getType()));
+				}
 			}
 			routeStops.put(location, seeds);
 
@@ -597,32 +690,87 @@ public class IronmanFarmRunPlugin extends Plugin implements IronmanFarmRunPanel.
 		Set<Integer> routeItems = new HashSet<>();
 		for (int itemId : carried.getItems().keySet())
 		{
-			if (Teleport.ALL_ITEM_IDS.contains(itemId) || PatchType.HERB.getSeeds().contains(itemId))
+			boolean anchorSeed = runType.getAnchorTypes().stream().anyMatch(type -> type.getSeeds().contains(itemId));
+			if (Teleport.ALL_ITEM_IDS.contains(itemId) || anchorSeed)
 			{
 				routeItems.add(itemId);
 			}
 		}
 
-		return new Route(routeStops, config.carriedTeleportsOnly(), useHouse, useSpells, routeItems);
+		return new Route(runType, routeStops, config.carriedTeleportsOnly(), useHouse, useSpells, routeItems);
 	}
 
-	private BankFilterSpec bankFilterSpec(Map<FarmLocation, LocationSettings> settings, Collection<FarmLocation> stops,
-		@Nullable FarmingContract contract)
+	/**
+	 * Shortest Path's "any one of these items, at least this many": any seed of the kind, enough for a patch.
+	 */
+	private static Map<Integer, Integer> anySeed(PatchType type)
 	{
-		List<Integer> extraEquipment = new ArrayList<>();
+		Map<Integer, Integer> seeds = new HashMap<>();
+		for (int seed : type.getSeeds())
+		{
+			seeds.put(seed, type.getSeedsPerPatch());
+		}
+		return seeds;
+	}
+
+	private BankFilterSpec bankFilterSpec(RunType runType, Map<FarmLocation, LocationSettings> settings,
+		Collection<FarmLocation> stops, @Nullable FarmingContract contract)
+	{
+		Map<BankSection, List<Integer>> sections = new EnumMap<>(BankSection.class);
+		List<Integer> equipment = new ArrayList<>(RunItems.EQUIPMENT);
+		if (runType == RunType.HERB)
+		{
+			sections.put(BankSection.HERB_SEEDS, RunItems.HERB_SEEDS);
+			if (config.allotments())
+			{
+				sections.put(BankSection.ALLOTMENT_SEEDS, RunItems.ALLOTMENT_SEEDS);
+			}
+			if (config.flowers())
+			{
+				sections.put(BankSection.FLOWER_SEEDS, RunItems.FLOWER_SEEDS);
+			}
+		}
+		else
+		{
+			sections.put(BankSection.TREE_SAPLINGS, RunItems.TREE_SAPLINGS);
+			sections.put(BankSection.FRUIT_TREE_SAPLINGS, RunItems.FRUIT_TREE_SAPLINGS);
+			if (config.protectTrees())
+			{
+				Set<Integer> payments = new LinkedHashSet<>();
+				for (Sapling sapling : Sapling.values())
+				{
+					payments.add(sapling.getPayment());
+				}
+				sections.put(BankSection.PAYMENTS, List.copyOf(payments));
+			}
+			equipment.addAll(RunItems.TREE_EQUIPMENT);
+		}
+
+		// A contract's seed is shown even when the player doesn't grow that kind of crop otherwise
+		if (contract != null && RunType.of(contract.getType()) == runType)
+		{
+			BankSection section = contract.getType() == PatchType.ALLOTMENT ? BankSection.ALLOTMENT_SEEDS
+				: contract.getType() == PatchType.FLOWER ? BankSection.FLOWER_SEEDS : null;
+			if (section != null)
+			{
+				sections.putIfAbsent(section, List.of(contract.getSeed()));
+			}
+		}
+
 		if (config.graceful())
 		{
-			gracefulPieces.forEach(extraEquipment::addAll);
+			gracefulPieces.forEach(equipment::addAll);
 		}
 		if (config.volcanicAsh())
 		{
-			extraEquipment.add(ItemID.FOSSIL_VOLCANIC_ASH);
+			equipment.add(ItemID.FOSSIL_VOLCANIC_ASH);
 		}
+		sections.put(BankSection.EQUIPMENT, equipment);
 
 		// The teleports to bring for the stops left
-		Set<Integer> teleportItems = new LinkedHashSet<>();
 		if (config.bankTeleports())
 		{
+			Set<Integer> teleportItems = new LinkedHashSet<>();
 			for (FarmLocation location : stops)
 			{
 				for (Teleport teleport : location.teleportsFor(settings.get(location).getTeleport()))
@@ -630,26 +778,36 @@ public class IronmanFarmRunPlugin extends Plugin implements IronmanFarmRunPanel.
 					teleportItems.addAll(teleport.bankItemIds());
 				}
 			}
+			sections.put(BankSection.TELEPORTS, List.copyOf(teleportItems));
 		}
 
-		return new BankFilterSpec(config.allotments(), config.flowers(), contract == null ? -1 : contract.getSeed(),
-			extraEquipment, List.copyOf(teleportItems));
+		return new BankFilterSpec(sections);
 	}
 
-	private static String stepLabel(FarmPatch patch, Step step, RunPlan plan, @Nullable FarmingContract contract)
+	private static String stepLabel(FarmPatch patch, Step step, RunPlan plan, Map<FarmPatch, PatchState> patches,
+		@Nullable FarmingContract contract)
 	{
-		if (step == Step.PLANT && contract != null && plan.getContractSeeds().containsKey(patch))
+		switch (step)
 		{
-			return "Plant " + contract.getName();
+			case PLANT:
+				return contract != null && plan.getContractSeeds().containsKey(patch) ? "Plant " + contract.getName() : step.getLabel();
+			case CURE:
+				// Trees are pruned rather than cured
+				return patch.getType().isTree() ? "Prune" : step.getLabel();
+			case PAY:
+				Sapling tree = patches.get(patch).getCrop();
+				return tree == null ? "Pay gardener" : "Pay " + tree.paymentLabel();
+			default:
+				return step.getLabel();
 		}
-		return step.getLabel();
 	}
 
-	private List<PatchOverlay.Highlight> highlights(RunPlan plan, @Nullable FarmingContract contract)
+	private void updateHighlights(RunPlan plan, Map<FarmPatch, PatchState> patches, @Nullable FarmingContract contract)
 	{
 		if (!runActive || !config.highlightPatches())
 		{
-			return List.of();
+			patchOverlay.setHighlights(List.of(), List.of());
+			return;
 		}
 
 		List<PatchOverlay.Highlight> highlights = new ArrayList<>();
@@ -661,17 +819,33 @@ public class IronmanFarmRunPlugin extends Plugin implements IronmanFarmRunPanel.
 			if (step != null)
 			{
 				// A patch can be several objects; box them all but label only one
-				String label = labelled.add(patch) ? stepLabel(patch, step, plan, contract) : null;
+				String label = labelled.add(patch) ? stepLabel(patch, step, plan, patches, contract) : null;
 				highlights.add(new PatchOverlay.Highlight(entry.getKey(), step.getColor(), label));
 			}
 		}
-		return highlights;
+
+		// The gardener takes the payment, and can take down a grown tree for coins
+		List<PatchOverlay.NpcHighlight> npcHighlights = new ArrayList<>();
+		for (Map.Entry<NPC, FarmPatch> entry : gardeners.get().entrySet())
+		{
+			FarmPatch patch = entry.getValue();
+			Step step = plan.getSteps().get(patch);
+			if (step == Step.PAY)
+			{
+				npcHighlights.add(new PatchOverlay.NpcHighlight(entry.getKey(), step.getColor(), stepLabel(patch, step, plan, patches, contract)));
+			}
+			else if (step == Step.REMOVE)
+			{
+				npcHighlights.add(new PatchOverlay.NpcHighlight(entry.getKey(), step.getColor(), "Remove for " + Checklist.REMOVAL_COINS + " coins"));
+			}
+		}
+		patchOverlay.setHighlights(highlights, npcHighlights);
 	}
 
 	/**
 	 * The items the patches the player is at need next, in the colour of the step that uses them.
 	 */
-	private Map<Integer, Color> itemHighlights(RunPlan plan, @Nullable WorldPoint playerPoint)
+	private Map<Integer, Color> itemHighlights(RunPlan plan, Map<FarmPatch, PatchState> patches, @Nullable WorldPoint playerPoint)
 	{
 		if (!runActive || !config.highlightItems() || playerPoint == null)
 		{
@@ -700,17 +874,30 @@ public class IronmanFarmRunPlugin extends Plugin implements IronmanFarmRunPanel.
 					needed.add(ItemID.BOTTOMLESS_COMPOST_BUCKET_FILLED);
 					break;
 				case CURE:
-					needed = List.of(ItemID.PLANT_CURE);
+					needed = patch.getType().isTree()
+						? List.of(ItemID.FAIRY_ENCHANTED_SECATEURS, ItemID.SECATEURS)
+						: List.of(ItemID.PLANT_CURE);
 					break;
 				case RAKE:
 					needed = List.of(ItemID.RAKE);
 					break;
 				case CLEAR:
+				case DIG:
 					needed = List.of(ItemID.SPADE);
 					break;
-				default:
+				case REMOVE:
+					needed = List.of(ItemID.COINS);
+					break;
+				case PAY:
+					Sapling tree = patches.get(patch).getCrop();
+					needed = tree == null ? List.of() : List.of(tree.getPayment());
+					break;
+				case HARVEST:
 					// Herbs and flowers are picked by hand; allotment crops are dug up
 					needed = patch.getType() == PatchType.ALLOTMENT ? List.of(ItemID.SPADE) : List.of();
+					break;
+				default:
+					needed = List.of();
 					break;
 			}
 
@@ -723,7 +910,7 @@ public class IronmanFarmRunPlugin extends Plugin implements IronmanFarmRunPanel.
 	}
 
 	@Nullable
-	private ChecklistOverlay.Content overlayContent(boolean loggedIn, RunPlan plan, Map<FarmPatch, PatchState> patches,
+	private ChecklistOverlay.Content overlayContent(RunType runType, boolean loggedIn, RunPlan plan, Map<FarmPatch, PatchState> patches,
 		List<FarmLocation> stops, List<ChecklistItem> checklist, @Nullable WorldPoint playerPoint, RunPlan.Options options,
 		@Nullable FarmingContract contract)
 	{
@@ -737,7 +924,9 @@ public class IronmanFarmRunPlugin extends Plugin implements IronmanFarmRunPanel.
 
 		// At the stop the player is at: each patch they tend there and what it needs next
 		List<ChecklistOverlay.Line> steps = new ArrayList<>();
-		Set<FarmPatch> contractPatches = contract == null ? Set.of() : new HashSet<>(contract.patches(options.includes(contract.getType())));
+		Set<FarmPatch> contractPatches = contract == null || RunType.of(contract.getType()) != runType
+			? Set.of()
+			: new HashSet<>(contract.patches(options.includes(contract.getType())));
 		for (FarmLocation location : stops)
 		{
 			if (playerPoint == null || !location.isNear(playerPoint, 0))
@@ -747,7 +936,7 @@ public class IronmanFarmRunPlugin extends Plugin implements IronmanFarmRunPanel.
 
 			for (FarmPatch patch : location.getPatches())
 			{
-				if (!options.includes(patch.getType()) && !contractPatches.contains(patch))
+				if (!options.includes(patch) && !contractPatches.contains(patch))
 				{
 					continue;
 				}
@@ -755,7 +944,7 @@ public class IronmanFarmRunPlugin extends Plugin implements IronmanFarmRunPanel.
 				Step step = plan.getSteps().get(patch);
 				if (step != null)
 				{
-					steps.add(new ChecklistOverlay.Line(patch.getName(), stepLabel(patch, step, plan, contract), step.getColor()));
+					steps.add(new ChecklistOverlay.Line(patch.getName(), stepLabel(patch, step, plan, patches, contract), step.getColor()));
 				}
 				else if (plan.getWithoutSeeds().contains(patch))
 				{
@@ -779,7 +968,8 @@ public class IronmanFarmRunPlugin extends Plugin implements IronmanFarmRunPanel.
 		}
 
 		int left = stops.size();
-		String title = runActive ? "Farm run: " + left + (left == 1 ? " stop left" : " stops left") : "Farm run";
+		String noun = Character.toUpperCase(runType.getNoun().charAt(0)) + runType.getNoun().substring(1);
+		String title = runActive ? noun + ": " + left + (left == 1 ? " stop left" : " stops left") : noun;
 		return new ChecklistOverlay.Content(title, steps, lines);
 	}
 
@@ -794,28 +984,36 @@ public class IronmanFarmRunPlugin extends Plugin implements IronmanFarmRunPanel.
 		runStops.clear();
 		completedStops.clear();
 		reachedStops.clear();
+		idleSince.clear();
 		route = null;
-		awaitingCompost.clear();
+		justPlanted.clear();
 		router.clear();
 		bankFilter.close();
 	}
 
-	private Map<FarmLocation, LocationSettings> locationSettings()
+	private static String keyPrefix(RunType runType)
 	{
+		// Herb runs came first, so their keys have no prefix
+		return runType == RunType.TREE ? TREE_KEY_PREFIX : "";
+	}
+
+	private Map<FarmLocation, LocationSettings> locationSettings(RunType runType)
+	{
+		String prefix = keyPrefix(runType);
 		Map<FarmLocation, LocationSettings> settings = new EnumMap<>(FarmLocation.class);
 		for (FarmLocation location : FarmLocation.values())
 		{
 			settings.put(location, new LocationSettings(
 				// On unless the player has unticked it
-				!"false".equals(savedChoice(ENABLED_KEY_PREFIX + location.name())),
-				savedTeleport(location)));
+				!"false".equals(savedChoice(prefix + ENABLED_KEY_PREFIX + location.name())),
+				savedTeleport(location, prefix)));
 		}
 		return settings;
 	}
 
-	private Teleport savedTeleport(FarmLocation location)
+	private Teleport savedTeleport(FarmLocation location, String prefix)
 	{
-		String saved = savedChoice(TELEPORT_KEY_PREFIX + location.name());
+		String saved = savedChoice(prefix + TELEPORT_KEY_PREFIX + location.name());
 		if (saved != null)
 		{
 			try
@@ -840,6 +1038,10 @@ public class IronmanFarmRunPlugin extends Plugin implements IronmanFarmRunPanel.
 		return configManager.getRSProfileConfiguration(IronmanFarmRunConfig.GROUP, key);
 	}
 
+	/**
+	 * What the player has on them, with noted items counted as the items themselves, as gardeners
+	 * take payments noted.
+	 */
 	private Carried carried()
 	{
 		Map<Integer, Integer> items = new HashMap<>();
@@ -852,7 +1054,7 @@ public class IronmanFarmRunPlugin extends Plugin implements IronmanFarmRunPanel.
 				{
 					if (item.getId() > 0)
 					{
-						items.merge(item.getId(), item.getQuantity(), Integer::sum);
+						items.merge(itemManager.canonicalize(item.getId()), item.getQuantity(), Integer::sum);
 					}
 				}
 			}

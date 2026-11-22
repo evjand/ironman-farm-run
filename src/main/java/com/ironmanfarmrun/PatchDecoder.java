@@ -53,6 +53,7 @@ final class PatchDecoder
 		}
 
 		int code = table[value];
+		Sapling crop = type.getCrops() == null ? null : type.getCrops()[value];
 		if (code >= 0)
 		{
 			// A healthy crop with that many growth ticks to go, counted from the tick it was seen in
@@ -60,11 +61,12 @@ final class PatchDecoder
 			long seenTick = tickTime(tick, 0, seenAt, offsetPrecisionMins, offsetMins);
 			long readyAt = tickTime(tick, code, seenTick, offsetPrecisionMins, offsetMins);
 			return readyAt <= now
-				? new PatchState(PatchStatus.READY, 0)
-				: new PatchState(PatchStatus.GROWING, readyAt);
+				? new PatchState(type.grownStatus(), 0, crop)
+				: new PatchState(PatchStatus.GROWING, readyAt, crop);
 		}
 
-		return new PatchState(settledStatus(code), 0);
+		PatchStatus status = settledStatus(code);
+		return new PatchState(status, 0, status == PatchStatus.WEEDS || status == PatchStatus.EMPTY ? null : crop);
 	}
 
 	private static PatchStatus settledStatus(int code)
@@ -81,6 +83,12 @@ final class PatchDecoder
 				return PatchStatus.DISEASED;
 			case PatchStateTables.DEAD:
 				return PatchStatus.DEAD;
+			case PatchStateTables.CHECK_HEALTH:
+				return PatchStatus.CHECK_HEALTH;
+			case PatchStateTables.GROWN:
+				return PatchStatus.GROWN;
+			case PatchStateTables.STUMP:
+				return PatchStatus.STUMP;
 			default:
 				return PatchStatus.UNKNOWN;
 		}

@@ -8,12 +8,25 @@ import net.runelite.api.gameval.ItemID;
 
 /**
  * A Farming Guild contract for a crop grown in one of the patch types a run tends. Contracts for
- * trees, bushes and the like aren't part of a run and have no constant here.
+ * bushes, cacti and the like aren't part of a run and have no constant here.
  */
 @Getter
 @RequiredArgsConstructor
 public enum FarmingContract
 {
+	OAK(7, "Oak", PatchType.TREE, ItemID.PLANTPOT_OAK_SAPLING),
+	WILLOW(8, "Willow", PatchType.TREE, ItemID.PLANTPOT_WILLOW_SAPLING),
+	MAPLE(9, "Maple", PatchType.TREE, ItemID.PLANTPOT_MAPLE_SAPLING),
+	YEW(10, "Yew", PatchType.TREE, ItemID.PLANTPOT_YEW_SAPLING),
+	MAGIC(11, "Magic", PatchType.TREE, ItemID.PLANTPOT_MAGIC_TREE_SAPLING),
+	APPLE(12, "Apple", PatchType.FRUIT_TREE, ItemID.PLANTPOT_APPLE_SAPLING),
+	BANANA(13, "Banana", PatchType.FRUIT_TREE, ItemID.PLANTPOT_BANANA_SAPLING),
+	ORANGE(14, "Orange", PatchType.FRUIT_TREE, ItemID.PLANTPOT_ORANGE_SAPLING),
+	CURRY(15, "Curry", PatchType.FRUIT_TREE, ItemID.PLANTPOT_CURRY_SAPLING),
+	PINEAPPLE(16, "Pineapple", PatchType.FRUIT_TREE, ItemID.PLANTPOT_PINEAPPLE_SAPLING),
+	PAPAYA(17, "Papaya", PatchType.FRUIT_TREE, ItemID.PLANTPOT_PAPAYA_SAPLING),
+	PALM(18, "Palm", PatchType.FRUIT_TREE, ItemID.PLANTPOT_PALM_SAPLING),
+	DRAGONFRUIT(19, "Dragonfruit", PatchType.FRUIT_TREE, ItemID.PLANTPOT_DRAGONFRUIT_SAPLING),
 	GUAM(20, "Guam", PatchType.HERB, ItemID.GUAM_SEED),
 	MARRENTILL(21, "Marrentill", PatchType.HERB, ItemID.MARRENTILL_SEED),
 	TARROMIN(22, "Tarromin", PatchType.HERB, ItemID.TARROMIN_SEED),
@@ -66,7 +79,7 @@ public enum FarmingContract
 
 	String seedLabel()
 	{
-		return name + " seed";
+		return name + (type.isTree() ? " sapling" : " seed");
 	}
 
 	/**

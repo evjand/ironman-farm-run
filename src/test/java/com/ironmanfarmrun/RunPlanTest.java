@@ -21,9 +21,15 @@ public class RunPlanTest
 	private static final FarmPatch GUILD_HERB = FarmLocation.FARMING_GUILD.herbPatch();
 	private static final FarmPatch GUILD_ALLOTMENT = FarmLocation.FARMING_GUILD.patches(PatchType.ALLOTMENT).get(0);
 
-	private static final RunPlan.Options HERBS = new RunPlan.Options(false, false, false);
-	private static final RunPlan.Options EVERYTHING = new RunPlan.Options(true, true, false);
-	private static final RunPlan.Options COMPOST = new RunPlan.Options(false, false, true);
+	private static final RunPlan.Options HERBS = new RunPlan.Options(RunType.HERB, false, false, false, false, 99);
+	private static final RunPlan.Options EVERYTHING = new RunPlan.Options(RunType.HERB, true, true, false, false, 99);
+	private static final RunPlan.Options COMPOST = new RunPlan.Options(RunType.HERB, false, false, true, false, 99);
+	private static final RunPlan.Options TREES = new RunPlan.Options(RunType.TREE, true, true, false, false, 99);
+	private static final RunPlan.Options TREES_PROTECTED = new RunPlan.Options(RunType.TREE, false, false, true, true, 99);
+
+	private static final FarmPatch LUMBRIDGE_TREE = FarmLocation.LUMBRIDGE.patches(PatchType.TREE).get(0);
+	private static final FarmPatch GUILD_TREE = FarmLocation.FARMING_GUILD.patches(PatchType.TREE).get(0);
+	private static final FarmPatch GUILD_FRUIT_TREE = FarmLocation.FARMING_GUILD.patches(PatchType.FRUIT_TREE).get(0);
 
 	private final Map<FarmPatch, PatchState> states = new HashMap<>();
 	private final Map<Integer, Integer> carried = new HashMap<>();
@@ -39,9 +45,15 @@ public class RunPlanTest
 	}
 
 	private RunPlan plan(List<FarmLocation> stops, RunPlan.Options options, Set<FarmPatch> composted,
-		Set<FarmPatch> awaitingCompost, FarmingContract contract)
+		Set<FarmPatch> justPlanted, FarmingContract contract)
 	{
-		return RunPlan.of(stops, states, composted, awaitingCompost, options, new Carried(carried, Map.of()), contract);
+		return plan(stops, options, composted, Set.of(), justPlanted, contract);
+	}
+
+	private RunPlan plan(List<FarmLocation> stops, RunPlan.Options options, Set<FarmPatch> composted,
+		Set<FarmPatch> protectedTrees, Set<FarmPatch> justPlanted, FarmingContract contract)
+	{
+		return RunPlan.of(stops, states, composted, protectedTrees, justPlanted, options, new Carried(carried, Map.of()), contract);
 	}
 
 	@Test
@@ -54,7 +66,7 @@ public class RunPlanTest
 		set(FarmLocation.HOSIDIUS.herbPatch(), PatchStatus.EMPTY);
 		set(FarmLocation.FARMING_GUILD.herbPatch(), PatchStatus.GROWING);
 
-		RunPlan plan = plan(List.of(FarmLocation.values()), HERBS);
+		RunPlan plan = plan(FarmLocation.of(RunType.HERB), HERBS);
 
 		assertEquals(Step.HARVEST, plan.getSteps().get(FarmLocation.FALADOR.herbPatch()));
 		assertEquals(Step.CLEAR, plan.getSteps().get(FarmLocation.CATHERBY.herbPatch()));
@@ -213,5 +225,113 @@ public class RunPlanTest
 		set(FALADOR_HERB, PatchStatus.READY);
 
 		assertTrue(plan(List.of(FarmLocation.FALADOR), HERBS, Set.of(), Set.of(), FarmingContract.IRIT).getContractSeeds().isEmpty());
+	}
+
+	@Test
+	public void treesGoFromHealthCheckToPlanting()
+	{
+		set(LUMBRIDGE_TREE, PatchStatus.CHECK_HEALTH);
+		set(FarmLocation.VARROCK.patches(PatchType.TREE).get(0), PatchStatus.GROWN);
+		set(FarmLocation.FALADOR_PARK.patches(PatchType.TREE).get(0), PatchStatus.STUMP);
+		set(FarmLocation.TAVERLEY.patches(PatchType.TREE).get(0), PatchStatus.DISEASED);
+
+		RunPlan plan = plan(FarmLocation.of(RunType.TREE), TREES);
+
+		assertEquals(Step.CHECK_HEALTH, plan.getSteps().get(LUMBRIDGE_TREE));
+		assertEquals(Step.REMOVE, plan.getSteps().get(FarmLocation.VARROCK.patches(PatchType.TREE).get(0)));
+		assertEquals(Step.DIG, plan.getSteps().get(FarmLocation.FALADOR_PARK.patches(PatchType.TREE).get(0)));
+		assertEquals(Step.CURE, plan.getSteps().get(FarmLocation.TAVERLEY.patches(PatchType.TREE).get(0)));
+		// Each but the pruned tree makes way for a new one, whether or not a sapling is carried
+		assertEquals(3, plan.seedsNeeded(PatchType.TREE));
+	}
+
+	@Test
+	public void treeRunLeavesHerbPatchesAloneAndTheOtherWayRound()
+	{
+		set(GUILD_HERB, PatchStatus.READY);
+		set(GUILD_ALLOTMENT, PatchStatus.READY);
+		set(GUILD_TREE, PatchStatus.CHECK_HEALTH);
+		set(GUILD_FRUIT_TREE, PatchStatus.CHECK_HEALTH);
+		carried.put(ItemID.POTATO_SEED, 3);
+
+		assertEquals(Set.of(GUILD_TREE, GUILD_FRUIT_TREE), plan(List.of(FarmLocation.FARMING_GUILD), TREES).getSteps().keySet());
+		assertEquals(Set.of(GUILD_HERB, GUILD_ALLOTMENT), plan(List.of(FarmLocation.FARMING_GUILD), EVERYTHING).getSteps().keySet());
+	}
+
+	@Test
+	public void treePlantedOnTheRunGetsCompostThenThePayment()
+	{
+		states.put(LUMBRIDGE_TREE, new PatchState(PatchStatus.GROWING, 123, Sapling.WILLOW));
+		carried.put(ItemID.BASKET_APPLE_5, 1);
+		List<FarmLocation> stops = List.of(FarmLocation.LUMBRIDGE);
+
+		assertEquals(Step.COMPOST, plan(stops, TREES_PROTECTED, Set.of(), Set.of(), Set.of(LUMBRIDGE_TREE), null).getSteps().get(LUMBRIDGE_TREE));
+
+		RunPlan composted = plan(stops, TREES_PROTECTED, Set.of(LUMBRIDGE_TREE), Set.of(), Set.of(LUMBRIDGE_TREE), null);
+		assertEquals(Step.PAY, composted.getSteps().get(LUMBRIDGE_TREE));
+		assertEquals(Set.of(LUMBRIDGE_TREE), composted.getToPay());
+
+		assertNull(plan(stops, TREES_PROTECTED, Set.of(LUMBRIDGE_TREE), Set.of(LUMBRIDGE_TREE), Set.of(LUMBRIDGE_TREE), null)
+			.getSteps().get(LUMBRIDGE_TREE));
+		// A tree that was already growing before the run is left alone
+		assertNull(plan(stops, TREES_PROTECTED).getSteps().get(LUMBRIDGE_TREE));
+	}
+
+	@Test
+	public void treeToReplantCountsTowardsPaymentsWithTheSaplingSetAside()
+	{
+		set(LUMBRIDGE_TREE, PatchStatus.CHECK_HEALTH);
+		carried.put(ItemID.PLANTPOT_MAGIC_TREE_SAPLING, 1);
+
+		RunPlan plan = plan(List.of(FarmLocation.LUMBRIDGE), TREES_PROTECTED);
+
+		assertEquals(Set.of(LUMBRIDGE_TREE), plan.getToPay());
+		assertEquals(Integer.valueOf(ItemID.PLANTPOT_MAGIC_TREE_SAPLING), plan.getSeedsFor().get(LUMBRIDGE_TREE));
+	}
+
+	@Test
+	public void treeContractIsPlantedOnTreeRunsOnly()
+	{
+		set(GUILD_HERB, PatchStatus.READY);
+		set(GUILD_TREE, PatchStatus.CHECK_HEALTH);
+
+		assertEquals(Map.of(GUILD_TREE, ItemID.PLANTPOT_MAGIC_TREE_SAPLING),
+			plan(List.of(FarmLocation.FARMING_GUILD), TREES, Set.of(), Set.of(), FarmingContract.MAGIC).getContractSeeds());
+		assertTrue(plan(List.of(FarmLocation.FARMING_GUILD), HERBS, Set.of(), Set.of(), FarmingContract.MAGIC).getContractSeeds().isEmpty());
+	}
+
+	@Test
+	public void gardenerIsOnlyPaidWithThePaymentToHand()
+	{
+		states.put(LUMBRIDGE_TREE, new PatchState(PatchStatus.GROWING, 123, Sapling.MAGIC));
+		carried.put(ItemID.COCONUT, 24);
+		List<FarmLocation> stops = List.of(FarmLocation.LUMBRIDGE);
+
+		RunPlan shortOne = plan(stops, TREES_PROTECTED, Set.of(LUMBRIDGE_TREE), Set.of(), Set.of(LUMBRIDGE_TREE), null);
+		assertNull(shortOne.getSteps().get(LUMBRIDGE_TREE));
+		// Still on the checklist as wanted
+		assertEquals(Set.of(LUMBRIDGE_TREE), shortOne.getToPay());
+
+		carried.put(ItemID.COCONUT, 25);
+		assertEquals(Step.PAY, plan(stops, TREES_PROTECTED, Set.of(LUMBRIDGE_TREE), Set.of(), Set.of(LUMBRIDGE_TREE), null)
+			.getSteps().get(LUMBRIDGE_TREE));
+	}
+
+	@Test
+	public void guildPatchesAboveThePlayersFarmingLevelAreLeftOut()
+	{
+		set(GUILD_TREE, PatchStatus.CHECK_HEALTH);
+		set(GUILD_FRUIT_TREE, PatchStatus.WEEDS);
+		set(GUILD_HERB, PatchStatus.READY);
+		set(GUILD_ALLOTMENT, PatchStatus.READY);
+		carried.put(ItemID.POTATO_SEED, 3);
+		List<FarmLocation> guild = List.of(FarmLocation.FARMING_GUILD);
+
+		assertEquals(Set.of(GUILD_TREE), plan(guild, new RunPlan.Options(RunType.TREE, false, false, false, false, 80)).getSteps().keySet());
+		assertEquals(Set.of(GUILD_TREE, GUILD_FRUIT_TREE), plan(guild, new RunPlan.Options(RunType.TREE, false, false, false, false, 85)).getSteps().keySet());
+		assertTrue(plan(guild, new RunPlan.Options(RunType.TREE, false, false, false, false, 64)).getSteps().isEmpty());
+		assertEquals(Set.of(GUILD_ALLOTMENT), plan(guild, new RunPlan.Options(RunType.HERB, true, false, false, false, 50)).getSteps().keySet());
+
+		assertEquals(List.of(GUILD_TREE), FarmLocation.FARMING_GUILD.anchors(RunType.TREE, 80));
 	}
 }

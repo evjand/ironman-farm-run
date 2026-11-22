@@ -47,6 +47,25 @@ final class RunItems
 		ItemID.WHITE_LILY_SEED
 	);
 
+	static final List<Integer> TREE_SAPLINGS = List.of(
+		ItemID.PLANTPOT_OAK_SAPLING,
+		ItemID.PLANTPOT_WILLOW_SAPLING,
+		ItemID.PLANTPOT_MAPLE_SAPLING,
+		ItemID.PLANTPOT_YEW_SAPLING,
+		ItemID.PLANTPOT_MAGIC_TREE_SAPLING
+	);
+
+	static final List<Integer> FRUIT_TREE_SAPLINGS = List.of(
+		ItemID.PLANTPOT_APPLE_SAPLING,
+		ItemID.PLANTPOT_BANANA_SAPLING,
+		ItemID.PLANTPOT_ORANGE_SAPLING,
+		ItemID.PLANTPOT_CURRY_SAPLING,
+		ItemID.PLANTPOT_PINEAPPLE_SAPLING,
+		ItemID.PLANTPOT_PAPAYA_SAPLING,
+		ItemID.PLANTPOT_PALM_SAPLING,
+		ItemID.PLANTPOT_DRAGONFRUIT_SAPLING
+	);
+
 	/**
 	 * Compost that is used up one bucket per patch.
 	 */
@@ -71,6 +90,14 @@ final class RunItems
 		ItemID.GRACEFUL_LEGS,
 		ItemID.GRACEFUL_GLOVES,
 		ItemID.GRACEFUL_BOOTS
+	);
+
+	/**
+	 * Tools and consumables a tree run uses on top of the shared ones: coins to have a gardener
+	 * remove a grown tree.
+	 */
+	static final List<Integer> TREE_EQUIPMENT = List.of(
+		ItemID.COINS
 	);
 
 	/**

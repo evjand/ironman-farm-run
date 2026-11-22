@@ -15,7 +15,14 @@ class PanelState
 {
 	boolean loggedIn;
 	boolean runActive;
+	/**
+	 * The kind of run shown: the one in progress, or the one the player has picked.
+	 */
+	RunType runType;
 	Map<FarmPatch, PatchState> patches;
+	/**
+	 * The player's choices per location, for the run type shown.
+	 */
 	Map<FarmLocation, LocationSettings> settings;
 	/**
 	 * The stops left on the current run, or the ones the next run would make.
@@ -31,6 +38,10 @@ class PanelState
 	 */
 	@Nullable
 	String contract;
+	/**
+	 * The player's Farming level, boosts included, which decides the Farming Guild patches they can reach.
+	 */
+	int farmingLevel;
 	/**
 	 * Unix time in whole minutes, so the state only changes when a countdown would.
 	 */

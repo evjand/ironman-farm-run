@@ -36,6 +36,11 @@ public interface IronmanFarmRunConfig extends Config
 	String FLOWERS = "flowers";
 	String GRACEFUL = "graceful";
 	String VOLCANIC_ASH = "volcanicAsh";
+	String PROTECT_TREES = "protectTrees";
+	/**
+	 * The kind of run the side panel shows.
+	 */
+	String RUN_TYPE = "runType";
 
 	@ConfigSection(
 		name = "Overlays",
@@ -92,6 +97,30 @@ public interface IronmanFarmRunConfig extends Config
 	default boolean flowers()
 	{
 		return false;
+	}
+
+	@ConfigItem(
+		keyName = PROTECT_TREES,
+		name = "Pay gardeners",
+		description = "Pay each gardener to protect the tree you plant",
+		position = 4,
+		hidden = true
+	)
+	default boolean protectTrees()
+	{
+		return true;
+	}
+
+	@ConfigItem(
+		keyName = RUN_TYPE,
+		name = "Run type",
+		description = "The kind of run the side panel shows",
+		position = 7,
+		hidden = true
+	)
+	default RunType runType()
+	{
+		return RunType.HERB;
 	}
 
 	@ConfigItem(

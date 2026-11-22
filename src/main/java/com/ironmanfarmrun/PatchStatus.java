@@ -8,6 +8,15 @@ public enum PatchStatus
 {
 	READY("Ready", true),
 	/**
+	 * A tree that has finished growing and waits for its health check.
+	 */
+	CHECK_HEALTH("Check health", true),
+	/**
+	 * A tree whose health has been checked, still standing.
+	 */
+	GROWN("Grown", true),
+	STUMP("Stump", true),
+	/**
 	 * Weeds that have to be raked before anything can be planted.
 	 */
 	WEEDS("Weeds", true),
@@ -33,5 +42,14 @@ public enum PatchStatus
 	boolean needsVisit()
 	{
 		return needsVisit;
+	}
+
+	/**
+	 * Whether whatever is in the patch makes way for a new crop: everything that needs a visit but
+	 * a crop that only needs curing.
+	 */
+	boolean leadsToReplanting()
+	{
+		return needsVisit && this != DISEASED;
 	}
 }

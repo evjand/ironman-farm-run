@@ -6,6 +6,7 @@ import java.util.List;
 import java.util.Map;
 import javax.inject.Inject;
 import javax.inject.Singleton;
+import net.runelite.api.coords.WorldPoint;
 import net.runelite.client.eventbus.EventBus;
 import net.runelite.client.events.PluginMessage;
 
@@ -62,17 +63,18 @@ class ShortestPathRouter
 	static Map<String, Object> pathMessage(Route route)
 	{
 		List<Object> targets = new ArrayList<>();
-		for (Map.Entry<FarmLocation, Map<Integer, Integer>> stop : route.getStops().entrySet())
+		for (Map.Entry<FarmLocation, List<Map<Integer, Integer>>> stop : route.getStops().entrySet())
 		{
+			WorldPoint point = stop.getKey().pointFor(route.getRunType());
 			if (stop.getValue().isEmpty())
 			{
-				targets.add(stop.getKey().getPoint());
+				targets.add(point);
 			}
 			else
 			{
 				Map<String, Object> target = new HashMap<>();
-				target.put("point", stop.getKey().getPoint());
-				// A map of item id to quantity is "any one of these items, at least this many"
+				target.put("point", point);
+				// A list is "all of these"; each map in it is "any one of these items, at least this many"
 				target.put("requirements", stop.getValue());
 				targets.add(target);
 			}

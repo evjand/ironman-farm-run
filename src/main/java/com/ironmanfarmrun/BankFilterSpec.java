@@ -11,26 +11,18 @@ import javax.annotation.Nullable;
 import lombok.Value;
 
 /**
- * Which items the bank filter shows, and in which section.
+ * Which items the bank filter shows, section by section.
  */
 @Value
 class BankFilterSpec
 {
-	static final BankFilterSpec HERBS_ONLY = new BankFilterSpec(false, false, -1, List.of(), List.of());
+	static final BankFilterSpec EMPTY = new BankFilterSpec(Map.of());
 	static final int ITEMS_PER_ROW = 8;
 
-	boolean allotmentSeeds;
-	boolean flowerSeeds;
 	/**
-	 * A farming contract's seed, shown in its section even when the player doesn't grow that kind of
-	 * crop otherwise; -1 for none.
+	 * The items of each section, in the order they are shown. An item is in the first section that has it.
 	 */
-	int contractSeed;
-	/**
-	 * Shown in the equipment section after the tools: graceful and volcanic ash, when the player wants them.
-	 */
-	List<Integer> extraEquipment;
-	List<Integer> teleportItems;
+	Map<BankSection, List<Integer>> sections;
 
 	/**
 	 * @param itemId a canonical item id: not a note or placeholder
@@ -39,26 +31,13 @@ class BankFilterSpec
 	@Nullable
 	BankSection sectionOf(int itemId)
 	{
-		if (RunItems.HERB_SEEDS.contains(itemId))
+		for (BankSection section : BankSection.values())
 		{
-			return BankSection.HERB_SEEDS;
-		}
-		boolean contract = itemId == contractSeed;
-		if ((allotmentSeeds || contract) && RunItems.ALLOTMENT_SEEDS.contains(itemId))
-		{
-			return BankSection.ALLOTMENT_SEEDS;
-		}
-		if ((flowerSeeds || contract) && RunItems.FLOWER_SEEDS.contains(itemId))
-		{
-			return BankSection.FLOWER_SEEDS;
-		}
-		if (RunItems.EQUIPMENT.contains(itemId) || extraEquipment.contains(itemId))
-		{
-			return BankSection.EQUIPMENT;
-		}
-		if (teleportItems.contains(itemId))
-		{
-			return BankSection.TELEPORTS;
+			List<Integer> items = sections.get(section);
+			if (items != null && items.contains(itemId))
+			{
+				return section;
+			}
 		}
 		return null;
 	}
@@ -87,42 +66,31 @@ class BankFilterSpec
 	Arrangement arrange(Collection<Integer> bankItemIds)
 	{
 		Set<Integer> inBank = new LinkedHashSet<>(bankItemIds);
-		Map<BankSection, List<Integer>> bySection = new EnumMap<>(BankSection.class);
-		for (BankSection section : BankSection.values())
-		{
-			List<Integer> items = new ArrayList<>();
-			// The declared order first, so related items sit together whatever order the bank is in
-			for (int itemId : order(section))
-			{
-				if (inBank.contains(itemId) && sectionOf(itemId) == section)
-				{
-					items.add(itemId);
-				}
-			}
-			for (int itemId : inBank)
-			{
-				if (sectionOf(itemId) == section && !items.contains(itemId))
-				{
-					items.add(itemId);
-				}
-			}
-			if (!items.isEmpty())
-			{
-				bySection.put(section, items);
-			}
-		}
-
 		List<Integer> slots = new ArrayList<>();
 		Map<BankSection, Integer> headingRows = new EnumMap<>(BankSection.class);
-		for (Map.Entry<BankSection, List<Integer>> section : bySection.entrySet())
+		for (BankSection section : BankSection.values())
 		{
-			headingRows.put(section.getKey(), slots.size() / ITEMS_PER_ROW);
+			// The declared order, so related items sit together whatever order the bank is in
+			List<Integer> items = new ArrayList<>();
+			for (int itemId : sections.getOrDefault(section, List.of()))
+			{
+				if (inBank.contains(itemId) && sectionOf(itemId) == section && !items.contains(itemId))
+				{
+					items.add(itemId);
+				}
+			}
+			if (items.isEmpty())
+			{
+				continue;
+			}
+
+			headingRows.put(section, slots.size() / ITEMS_PER_ROW);
 			for (int i = 0; i < ITEMS_PER_ROW; i++)
 			{
 				slots.add(-1);
 			}
 
-			slots.addAll(section.getValue());
+			slots.addAll(items);
 			while (slots.size() % ITEMS_PER_ROW != 0)
 			{
 				slots.add(-1);
@@ -130,24 +98,5 @@ class BankFilterSpec
 		}
 
 		return new Arrangement(slots.stream().mapToInt(Integer::intValue).toArray(), headingRows);
-	}
-
-	private List<Integer> order(BankSection section)
-	{
-		switch (section)
-		{
-			case HERB_SEEDS:
-				return RunItems.HERB_SEEDS;
-			case ALLOTMENT_SEEDS:
-				return RunItems.ALLOTMENT_SEEDS;
-			case FLOWER_SEEDS:
-				return RunItems.FLOWER_SEEDS;
-			case EQUIPMENT:
-				List<Integer> equipment = new ArrayList<>(RunItems.EQUIPMENT);
-				equipment.addAll(extraEquipment);
-				return equipment;
-			default:
-				return teleportItems;
-		}
 	}
 }

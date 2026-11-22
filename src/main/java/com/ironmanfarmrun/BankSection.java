@@ -13,6 +13,9 @@ enum BankSection
 	HERB_SEEDS("Herb seeds"),
 	ALLOTMENT_SEEDS("Allotment seeds"),
 	FLOWER_SEEDS("Flower seeds"),
+	TREE_SAPLINGS("Tree saplings"),
+	FRUIT_TREE_SAPLINGS("Fruit tree saplings"),
+	PAYMENTS("Gardener payments"),
 	EQUIPMENT("Equipment"),
 	TELEPORTS("Teleports");
 

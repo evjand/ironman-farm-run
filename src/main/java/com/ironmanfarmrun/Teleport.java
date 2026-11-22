@@ -51,6 +51,21 @@ public enum Teleport
 	HARMONY_TAB("Harmony tab", ItemID.TELETAB_HARMONY),
 	HARMONY_SPELL("Harmony spell", runes(ItemID.LAWRUNE, 1, ItemID.NATURERUNE, 1, ItemID.SOULRUNE, 1)),
 
+	LUMBRIDGE_TAB("Lumbridge tab", ItemID.POH_TABLET_LUMBRIDGETELEPORT),
+	LUMBRIDGE_SPELL("Lumbridge spell", runes(ItemID.LAWRUNE, 1, ItemID.AIRRUNE, 3, ItemID.EARTHRUNE, 1)),
+	VARROCK_TAB("Varrock tab", ItemID.POH_TABLET_VARROCKTELEPORT),
+	VARROCK_SPELL("Varrock spell", runes(ItemID.LAWRUNE, 1, ItemID.AIRRUNE, 3, ItemID.FIRERUNE, 1)),
+	RING_OF_WEALTH("Ring of wealth",
+		ItemID.RING_OF_WEALTH_1, ItemID.RING_OF_WEALTH_2, ItemID.RING_OF_WEALTH_3, ItemID.RING_OF_WEALTH_4, ItemID.RING_OF_WEALTH_5,
+		ItemID.RING_OF_WEALTH_I1, ItemID.RING_OF_WEALTH_I2, ItemID.RING_OF_WEALTH_I3, ItemID.RING_OF_WEALTH_I4, ItemID.RING_OF_WEALTH_I5),
+	TAVERLEY_TAB("Taverley tab", ItemID.NZONE_TELETAB_TAVERLEY),
+	ROYAL_SEED_POD("Royal seed pod", ItemID.MM2_ROYAL_SEED_POD),
+	PENDANT_OF_ATES("Pendant of ates", ItemID.PENDANT_OF_ATES),
+	BRIMHAVEN_TAB("Brimhaven tab", ItemID.NZONE_TELETAB_BRIMHAVEN),
+	TELEPORT_CRYSTAL("Teleport crystal",
+		ItemID.MOURNING_TELEPORT_CRYSTAL_1, ItemID.MOURNING_TELEPORT_CRYSTAL_2, ItemID.MOURNING_TELEPORT_CRYSTAL_3,
+		ItemID.MOURNING_TELEPORT_CRYSTAL_4, ItemID.MOURNING_TELEPORT_CRYSTAL_5),
+
 	// Ways into the player's house, to go on from there with its jewellery box, portals, fairy ring or spirit tree
 	HOUSE_TAB("House: tab", true, Set.of(ItemID.POH_TABLET_TELEPORTTOHOUSE), Map.of()),
 	HOUSE_SPELL("House: spell", true, Set.of(), runes(ItemID.LAWRUNE, 1, ItemID.AIRRUNE, 1, ItemID.EARTHRUNE, 1)),

@@ -15,8 +15,9 @@ import lombok.Value;
 /**
  * What is left to do at a run's stops: the next step at each patch that needs one.
  *
- * A location is a stop because its herb patch needs attention. Allotments and flower patches are
- * tended along the way while the player carries the seeds to replant them.
+ * A location is a stop because one of its anchor patches needs attention: the herb patch on a herb
+ * run, the trees on a tree run. On a herb run, allotments and flower patches are tended along the
+ * way while the player carries the seeds to replant them.
  */
 @Value
 class RunPlan
@@ -27,15 +28,40 @@ class RunPlan
 	@Value
 	static class Options
 	{
+		RunType runType;
 		boolean allotments;
 		boolean flowers;
 		/**
 		 * Whether composting is a step, which takes the player carrying compost.
 		 */
 		boolean compost;
+		/**
+		 * Whether paying a gardener to protect a newly planted tree is a step.
+		 */
+		boolean protect;
+		/**
+		 * The player's Farming level, boosts included, which decides the Farming Guild patches they can reach.
+		 */
+		int farmingLevel;
+
+		/**
+		 * Whether the run tends the patch: one of the kinds it covers, within the player's reach.
+		 */
+		boolean includes(FarmPatch patch)
+		{
+			return includes(patch.getType()) && patch.getFarmingLevel() <= farmingLevel;
+		}
 
 		boolean includes(PatchType type)
 		{
+			if (runType.getAnchorTypes().contains(type))
+			{
+				return true;
+			}
+			if (runType != RunType.HERB)
+			{
+				return false;
+			}
 			switch (type)
 			{
 				case ALLOTMENT:
@@ -43,7 +69,7 @@ class RunPlan
 				case FLOWER:
 					return flowers;
 				default:
-					return true;
+					return false;
 			}
 		}
 	}
@@ -60,6 +86,16 @@ class RunPlan
 	 * The patches among {@link #steps} that still get compost, now or after the current step.
 	 */
 	Set<FarmPatch> toCompost;
+	/**
+	 * The trees whose gardener still gets paid, now or after the current step: those among
+	 * {@link #steps}, and any planted on this run that the player has no payment for.
+	 */
+	Set<FarmPatch> toPay;
+	/**
+	 * The seed or sapling set aside from what the player carries for each patch in {@link #toPlant}
+	 * that got one.
+	 */
+	Map<FarmPatch, Integer> seedsFor;
 	/**
 	 * Patches that have to be planted with one seed in particular: the crop of a farming contract.
 	 */
@@ -110,6 +146,19 @@ class RunPlan
 		return patches * type.getSeedsPerPatch();
 	}
 
+	int count(Step step)
+	{
+		int count = 0;
+		for (Step planned : steps.values())
+		{
+			if (planned == step)
+			{
+				count++;
+			}
+		}
+		return count;
+	}
+
 	boolean has(Step step)
 	{
 		return steps.containsValue(step);
@@ -122,22 +171,36 @@ class RunPlan
 	 *                        the player is at first
 	 * @param states          every patch's state
 	 * @param composted       patches whose current crop, or bare soil, has been treated with compost
-	 * @param awaitingCompost patches planted earlier on this run that the player is still standing by
+	 * @param protectedTrees  trees whose gardener has been paid to protect them
+	 * @param justPlanted     patches planted earlier on this run that the player is still standing by,
+	 *                        which can still be composted and paid for
 	 * @param carried         what the player has on them, which decides the allotments and flowers they can replant
 	 * @param contract        the player's farming contract, if it is for a crop a run grows
 	 */
 	static RunPlan of(List<FarmLocation> stops, Map<FarmPatch, PatchState> states, Set<FarmPatch> composted,
-		Set<FarmPatch> awaitingCompost, Options options, Carried carried, @Nullable FarmingContract contract)
+		Set<FarmPatch> protectedTrees, Set<FarmPatch> justPlanted, Options options, Carried carried,
+		@Nullable FarmingContract contract)
 	{
 		Map<FarmPatch, Step> steps = new LinkedHashMap<>();
 		Set<FarmPatch> toPlant = new LinkedHashSet<>();
 		Set<FarmPatch> toCompost = new LinkedHashSet<>();
+		Set<FarmPatch> toPay = new LinkedHashSet<>();
+		Map<FarmPatch, Integer> seedsFor = new HashMap<>();
 		Map<FarmPatch, Integer> contractSeeds = new HashMap<>();
 		Set<FarmPatch> withoutSeeds = new LinkedHashSet<>();
 
-		Set<FarmPatch> contractPatches = contract == null
-			? Set.of()
-			: new HashSet<>(contract.patches(options.includes(contract.getType())));
+		// A contract is grown on the run of its kind
+		Set<FarmPatch> contractPatches = new HashSet<>();
+		if (contract != null && RunType.of(contract.getType()) == options.getRunType())
+		{
+			for (FarmPatch patch : contract.patches(options.includes(contract.getType())))
+			{
+				if (patch.getFarmingLevel() <= options.getFarmingLevel())
+				{
+					contractPatches.add(patch);
+				}
+			}
+		}
 		// A seed box's contents can't be seen, so with one the player is taken to have whatever they need
 		boolean seedBox = carried.hasAny(RunItems.SEED_BOXES);
 		Map<Integer, Integer> seedsLeft = new HashMap<>(carried.getItems());
@@ -147,23 +210,25 @@ class RunPlan
 			for (FarmPatch patch : location.getPatches())
 			{
 				boolean contractPatch = contractPatches.contains(patch);
-				if (!contractPatch && !options.includes(patch.getType()))
+				if (!contractPatch && !options.includes(patch))
 				{
 					continue;
 				}
 
 				PatchStatus status = states.getOrDefault(patch, PatchState.UNKNOWN).getStatus();
-				// Everything but a cure or a late compost ends in planting
-				boolean replant = status == PatchStatus.READY || status == PatchStatus.DEAD
-					|| status == PatchStatus.WEEDS || status == PatchStatus.EMPTY;
-
+				boolean replant = status.leadsToReplanting();
 				if (replant)
 				{
 					List<Integer> seeds = contractPatch ? List.of(contract.getSeed()) : patch.getType().getSeeds();
-					boolean gotSeeds = take(seedsLeft, seeds, patch.getType().getSeedsPerPatch());
-					// The herb patch is why the location is a stop, and a contract is a commitment, so
+					Integer seed = take(seedsLeft, seeds, patch.getType().getSeedsPerPatch());
+					if (seed != null)
+					{
+						seedsFor.put(patch, seed);
+					}
+					// The anchor patches are why the location is a stop, and a contract is a commitment, so
 					// those are planned whatever is carried; other patches only while seeds last
-					if (!gotSeeds && !seedBox && patch.getType() != PatchType.HERB && !contractPatch)
+					boolean anchor = options.getRunType().getAnchorTypes().contains(patch.getType());
+					if (seed == null && !seedBox && !anchor && !contractPatch)
 					{
 						withoutSeeds.add(patch);
 						continue;
@@ -171,9 +236,18 @@ class RunPlan
 				}
 
 				boolean needsCompost = options.isCompost() && !composted.contains(patch);
-				Step step = step(status, needsCompost, awaitingCompost.contains(patch));
+				boolean needsPayment = options.isProtect() && patch.getType().isTree() && !protectedTrees.contains(patch);
+				// The gardener can only be paid with the payment to hand; without it the tree goes unprotected
+				Sapling tree = states.getOrDefault(patch, PatchState.UNKNOWN).getCrop();
+				boolean canPay = tree != null && carried.count(tree.getPayment()) >= tree.getPaymentAmount();
+				Step step = step(status, needsCompost, needsPayment && canPay, justPlanted.contains(patch));
 				if (step == null)
 				{
+					// Planted on this run without the payment to hand: nothing to do, but the checklist says what's missing
+					if (needsPayment && status == PatchStatus.GROWING && justPlanted.contains(patch))
+					{
+						toPay.add(patch);
+					}
 					continue;
 				}
 
@@ -182,9 +256,15 @@ class RunPlan
 				{
 					toPlant.add(patch);
 				}
-				if (needsCompost && status != PatchStatus.DISEASED)
+				// Whatever ends in planting, or was just planted, still gets its compost and payment
+				boolean fresh = replant || status == PatchStatus.GROWING;
+				if (needsCompost && fresh)
 				{
 					toCompost.add(patch);
+				}
+				if (needsPayment && fresh)
+				{
+					toPay.add(patch);
 				}
 				if (contractPatch)
 				{
@@ -197,6 +277,8 @@ class RunPlan
 			Collections.unmodifiableMap(steps),
 			Collections.unmodifiableSet(toPlant),
 			Collections.unmodifiableSet(toCompost),
+			Collections.unmodifiableSet(toPay),
+			Collections.unmodifiableMap(seedsFor),
 			Collections.unmodifiableMap(contractSeeds),
 			Collections.unmodifiableSet(withoutSeeds));
 	}
@@ -204,9 +286,10 @@ class RunPlan
 	/**
 	 * Sets aside enough of any one kind of seed for a patch.
 	 *
-	 * @return whether there were enough
+	 * @return the seed set aside, or null if there weren't enough
 	 */
-	private static boolean take(Map<Integer, Integer> seedsLeft, List<Integer> seeds, int perPatch)
+	@Nullable
+	private static Integer take(Map<Integer, Integer> seedsLeft, List<Integer> seeds, int perPatch)
 	{
 		for (int seed : seeds)
 		{
@@ -214,19 +297,25 @@ class RunPlan
 			if (left >= perPatch)
 			{
 				seedsLeft.put(seed, left - perPatch);
-				return true;
+				return seed;
 			}
 		}
-		return false;
+		return null;
 	}
 
 	@Nullable
-	private static Step step(PatchStatus status, boolean needsCompost, boolean awaitingCompost)
+	private static Step step(PatchStatus status, boolean needsCompost, boolean needsPayment, boolean justPlanted)
 	{
 		switch (status)
 		{
 			case READY:
 				return Step.HARVEST;
+			case CHECK_HEALTH:
+				return Step.CHECK_HEALTH;
+			case GROWN:
+				return Step.REMOVE;
+			case STUMP:
+				return Step.DIG;
 			case DEAD:
 				return Step.CLEAR;
 			case DISEASED:
@@ -236,8 +325,17 @@ class RunPlan
 			case EMPTY:
 				return needsCompost ? Step.COMPOST : Step.PLANT;
 			case GROWING:
-				// Compost can also go on after planting, which is the order many players use
-				return needsCompost && awaitingCompost ? Step.COMPOST : null;
+				// Compost can also go on after planting, which is the order many players use; the
+				// gardener is paid once the tree is in
+				if (!justPlanted)
+				{
+					return null;
+				}
+				if (needsCompost)
+				{
+					return Step.COMPOST;
+				}
+				return needsPayment ? Step.PAY : null;
 			default:
 				return null;
 		}

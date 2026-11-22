@@ -84,7 +84,7 @@ class BankFilter
 	private final ItemManager itemManager;
 	private final PluginManager pluginManager;
 
-	private BankFilterSpec spec = BankFilterSpec.HERBS_ONLY;
+	private BankFilterSpec spec = BankFilterSpec.EMPTY;
 	/**
 	 * Canonical item id to bank slot, worked out once per bank visit so items stay put as they are
 	 * withdrawn; null until the filter is first shown on this visit.

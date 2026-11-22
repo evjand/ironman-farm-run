@@ -1,6 +1,7 @@
 package com.ironmanfarmrun;
 
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import javax.annotation.Nullable;
@@ -13,14 +14,21 @@ import net.runelite.api.gameval.ItemID;
 final class Checklist
 {
 	/**
+	 * What a gardener charges to take down a grown tree.
+	 */
+	static final int REMOVAL_COINS = 200;
+
+	/**
 	 * The optional parts of the checklist.
 	 */
 	@Value
 	static class Options
 	{
+		RunType runType;
 		boolean allotments;
 		boolean flowers;
 		boolean compost;
+		boolean protect;
 		boolean volcanicAsh;
 		/**
 		 * Every graceful piece's item ids, one list per piece, or empty to leave graceful out.
@@ -32,37 +40,48 @@ final class Checklist
 	{
 	}
 
-	static List<ChecklistItem> build(RunPlan plan, Map<FarmLocation, LocationSettings> settings, Carried carried,
-		Options options, @Nullable FarmingContract contract)
+	/**
+	 * @param carried what the player has on them, with noted items counted as the items themselves
+	 */
+	static List<ChecklistItem> build(RunPlan plan, Map<FarmPatch, PatchState> states, Map<FarmLocation, LocationSettings> settings,
+		Carried carried, Options options, @Nullable FarmingContract contract)
 	{
 		List<ChecklistItem> items = new ArrayList<>();
 		boolean seedBox = carried.hasAny(RunItems.SEED_BOXES);
+		boolean trees = options.getRunType() == RunType.TREE;
 
-		int herbsNeeded = plan.seedsNeeded(PatchType.HERB);
-		if (herbsNeeded > 0)
+		// The anchors' seeds are counted against what the stops need
+		for (PatchType type : options.getRunType().getAnchorTypes().contains(PatchType.HERB)
+			? List.of(PatchType.HERB) : List.of(PatchType.TREE, PatchType.FRUIT_TREE))
 		{
-			int have = carried.count(PatchType.HERB.getSeeds());
-			if (have >= herbsNeeded)
+			int needed = plan.seedsNeeded(type);
+			if (needed == 0)
 			{
-				items.add(new ChecklistItem("Herb seeds", have + " / " + herbsNeeded, ChecklistItem.State.GOOD));
+				continue;
 			}
-			else if (seedBox)
+
+			int have = carried.count(type.getSeeds());
+			if (have >= needed)
+			{
+				items.add(new ChecklistItem(type.getSeedLabel(), have + " / " + needed, ChecklistItem.State.GOOD));
+			}
+			else if (seedBox && !type.isTree())
 			{
 				// A seed box's contents can't be read
-				items.add(new ChecklistItem("Herb seeds", have + " / " + herbsNeeded + " + box", ChecklistItem.State.UNSURE));
+				items.add(new ChecklistItem(type.getSeedLabel(), have + " / " + needed + " + box", ChecklistItem.State.UNSURE));
 			}
 			else
 			{
-				items.add(new ChecklistItem("Herb seeds", have + " / " + herbsNeeded, ChecklistItem.State.MISSING));
+				items.add(new ChecklistItem(type.getSeedLabel(), have + " / " + needed, ChecklistItem.State.MISSING));
 			}
 		}
 
 		// Allotments and flowers take whatever seeds the player brings, so these show how far they go
-		if (options.isAllotments())
+		if (!trees && options.isAllotments())
 		{
 			items.add(seedsFor(PatchType.ALLOTMENT, "Allotment seeds", carried, seedBox));
 		}
-		if (options.isFlowers())
+		if (!trees && options.isFlowers())
 		{
 			items.add(seedsFor(PatchType.FLOWER, "Flower seeds", carried, seedBox));
 		}
@@ -80,9 +99,28 @@ final class Checklist
 				}
 				else
 				{
-					items.add(new ChecklistItem(label, seedBox ? "Check seed box" : "Missing",
-						seedBox ? ChecklistItem.State.UNSURE : ChecklistItem.State.MISSING));
+					boolean unsure = seedBox && !contract.getType().isTree();
+					items.add(new ChecklistItem(label, unsure ? "Check seed box" : "Missing",
+						unsure ? ChecklistItem.State.UNSURE : ChecklistItem.State.MISSING));
 				}
+			}
+		}
+
+		if (trees && options.isProtect())
+		{
+			items.addAll(payments(plan, states, carried));
+		}
+
+		if (trees)
+		{
+			// A grown tree is taken down by its gardener for coins, or chopped, which needs an axe instead
+			int removals = plan.count(Step.CHECK_HEALTH) + plan.count(Step.REMOVE);
+			if (removals > 0)
+			{
+				int needed = removals * REMOVAL_COINS;
+				int coins = carried.count(ItemID.COINS);
+				items.add(new ChecklistItem("Coins to remove trees", coins + " / " + needed,
+					coins >= needed ? ChecklistItem.State.GOOD : ChecklistItem.State.UNSURE));
 			}
 		}
 
@@ -103,16 +141,25 @@ final class Checklist
 
 		// Tools may be with the tool leprechaun, so one that isn't carried is unsure rather than missing
 		items.add(tool("Spade", carried.has(ItemID.SPADE)));
-		items.add(tool("Seed dibber", carried.has(ItemID.DIBBER)));
+		if (!trees)
+		{
+			items.add(tool("Seed dibber", carried.has(ItemID.DIBBER)));
+		}
 		if (plan.has(Step.RAKE))
 		{
 			items.add(tool("Rake", carried.has(ItemID.RAKE)));
 		}
 		if (plan.has(Step.CURE))
 		{
-			items.add(tool("Plant cure", carried.has(ItemID.PLANT_CURE)));
+			// Trees are pruned rather than cured
+			items.add(trees
+				? tool("Secateurs", carried.has(ItemID.SECATEURS) || carried.has(ItemID.FAIRY_ENCHANTED_SECATEURS))
+				: tool("Plant cure", carried.has(ItemID.PLANT_CURE)));
 		}
-		items.add(tool("Magic secateurs", carried.has(ItemID.FAIRY_ENCHANTED_SECATEURS)));
+		if (!trees)
+		{
+			items.add(tool("Magic secateurs", carried.has(ItemID.FAIRY_ENCHANTED_SECATEURS)));
+		}
 
 		for (FarmLocation location : plan.targets())
 		{
@@ -164,6 +211,46 @@ final class Checklist
 				ash > 0 ? ChecklistItem.State.GOOD : ChecklistItem.State.MISSING));
 		}
 
+		return items;
+	}
+
+	/**
+	 * What each tree to be paid for will cost: the tree already in the patch, or the sapling set
+	 * aside for it. Saplings that share a payment are added together.
+	 */
+	private static List<ChecklistItem> payments(RunPlan plan, Map<FarmPatch, PatchState> states, Carried carried)
+	{
+		Map<Integer, Integer> needed = new LinkedHashMap<>();
+		Map<Integer, String> names = new LinkedHashMap<>();
+		int unknown = 0;
+		for (FarmPatch patch : plan.getToPay())
+		{
+			Sapling tree = plan.getToPlant().contains(patch)
+				? (plan.getSeedsFor().containsKey(patch) ? Sapling.bySapling(plan.getSeedsFor().get(patch)) : null)
+				: states.getOrDefault(patch, PatchState.UNKNOWN).getCrop();
+			if (tree == null)
+			{
+				unknown++;
+				continue;
+			}
+			needed.merge(tree.getPayment(), tree.getPaymentAmount(), Integer::sum);
+			names.putIfAbsent(tree.getPayment(), tree.getPaymentName());
+		}
+
+		List<ChecklistItem> items = new ArrayList<>();
+		for (Map.Entry<Integer, Integer> payment : needed.entrySet())
+		{
+			int have = carried.count(payment.getKey());
+			String name = names.get(payment.getKey());
+			items.add(new ChecklistItem("Pay: " + name, have + " / " + payment.getValue(),
+				have >= payment.getValue() ? ChecklistItem.State.GOOD : ChecklistItem.State.MISSING));
+		}
+		if (unknown > 0)
+		{
+			// The payment depends on the tree, which isn't known until the player brings its sapling
+			items.add(new ChecklistItem("Pay: for " + unknown + (unknown == 1 ? " more tree" : " more trees"),
+				"Bring saplings", ChecklistItem.State.UNSURE));
+		}
 		return items;
 	}
 

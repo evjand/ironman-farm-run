@@ -22,7 +22,7 @@ class ItemHighlightOverlay extends WidgetItemOverlay
 
 	private final ItemManager itemManager;
 	/**
-	 * Item id to highlight colour. Worked out by the plugin whenever the plan changes.
+	 * Canonical item id to highlight colour. Worked out by the plugin whenever the plan changes.
 	 */
 	private Map<Integer, Color> items = Map.of();
 
@@ -41,7 +41,8 @@ class ItemHighlightOverlay extends WidgetItemOverlay
 	@Override
 	public void renderItemOverlay(Graphics2D graphics, int itemId, WidgetItem widgetItem)
 	{
-		Color color = items.get(itemId);
+		// Payments can be noted
+		Color color = items.get(itemManager.canonicalize(itemId));
 		if (color == null)
 		{
 			return;

@@ -28,6 +28,10 @@ class PanelState
 	 * The stops left on the current run, or the ones the next run would make.
 	 */
 	Set<FarmLocation> targets;
+	/**
+	 * The stops of the run in progress, finished ones included; empty without a run.
+	 */
+	List<StopView> runStops;
 	List<ChecklistItem> checklist;
 	/**
 	 * The run options that are on.

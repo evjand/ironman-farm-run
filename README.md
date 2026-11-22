@@ -23,8 +23,10 @@ step by step. Allotments and flower patches can be tended along the way on a her
   payments, graceful and volcanic ash. Allotments and flowers are tended at each stop for as long as you carry the seeds to replant them,
   so bring as many as you like. An allotment takes three seeds of one kind.
 - **Routes from Shortest Path.** Starting a run asks the [Shortest Path](https://github.com/Skretzo/shortest-path)
-  plugin for the route to whichever remaining stop is cheapest to reach. When a stop is finished, or you leave it
-  once its herb patch is done, the route moves on to the next one.
+  plugin for the route to the next stop. When a stop is finished, or you leave it once its herb patch or trees are
+  done, the route moves on. The "Stop order" setting picks how the next stop is chosen: whichever is quickest to
+  reach from where you are (the default), or the order of the OSRS Wiki's farming run guides, which the side panel
+  lists the locations in.
 - **Any seed.** A patch needs a seed of its kind and the plugin doesn't care which, so you plant what you like.
   If you don't carry a herb seed for a stop, Shortest Path routes you through a bank first.
 - **Farming contracts.** If your Farming Guild contract is for a herb, allotment, flower, tree or fruit tree crop and
@@ -46,8 +48,11 @@ step by step. Allotments and flower patches can be tended along the way on a her
   gardener payments on a tree run, equipment and teleports. A button with the Farming icon at the top of the bank turns it on
   and off at any time. Needs the core Bank Tags plugin, and works alongside Bank Tag Layouts.
 
-Untick a location in the panel to leave it out of your runs, for example one you haven't unlocked. If a run gets
-stuck on a stop it can't finish, the stop's "Skip stop" button in the panel leaves it out of the rest of the run.
+Untick a location in the panel to leave it out of your runs, for example one you haven't unlocked.
+
+During a run the panel follows it: finished stops shrink to a line each, the stop you are at or headed to shows
+each patch's next step with the very next one marked, and the stops to come show how much is left to do there. If a
+run gets stuck on a stop it can't finish, that stop's "Skip stop" button leaves it out of the rest of the run.
 
 ## Things it can't see
 - Tools and compost stored with the tool leprechaun, and the contents of a seed box. These show as grey rather than

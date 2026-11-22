@@ -10,6 +10,25 @@ public interface IronmanFarmRunConfig extends Config
 {
 	String GROUP = "ironmanfarmrun";
 
+	enum StopOrder
+	{
+		NEAREST("Nearest next"),
+		RECOMMENDED("Recommended order");
+
+		private final String label;
+
+		StopOrder(String label)
+		{
+			this.label = label;
+		}
+
+		@Override
+		public String toString()
+		{
+			return label;
+		}
+	}
+
 	enum ChecklistOverlayMode
 	{
 		NEVER("Never"),
@@ -217,6 +236,19 @@ public interface IronmanFarmRunConfig extends Config
 	default boolean bankTeleports()
 	{
 		return true;
+	}
+
+	@ConfigItem(
+		keyName = "stopOrder",
+		name = "Stop order",
+		description = "Nearest next: route to whichever stop left is quickest to reach from where you are. "
+			+ "Recommended order: visit the stops in the order of the OSRS Wiki's farming run guides.",
+		position = 0,
+		section = routingSection
+	)
+	default StopOrder stopOrder()
+	{
+		return StopOrder.NEAREST;
 	}
 
 	@ConfigItem(

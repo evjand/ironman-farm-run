@@ -4,10 +4,12 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import javax.annotation.Nullable;
 import javax.inject.Inject;
 import javax.inject.Singleton;
 import net.runelite.api.coords.WorldPoint;
 import net.runelite.client.eventbus.EventBus;
+import net.runelite.client.eventbus.Subscribe;
 import net.runelite.client.events.PluginMessage;
 
 /**
@@ -18,10 +20,21 @@ import net.runelite.client.events.PluginMessage;
 class ShortestPathRouter
 {
 	private static final String NAMESPACE = "shortestpath";
+	private static final String QUERY_ID = "ironman-farm-run";
 
 	private final EventBus eventBus;
 	private boolean routed;
 	private boolean overridingSettings;
+	/**
+	 * The query asked alongside the shown path, to learn which stop it leads to; null when none is waiting.
+	 */
+	@Nullable
+	private volatile Route queried;
+	/**
+	 * The stop the shown path leads to, as Shortest Path last answered; null if not known.
+	 */
+	@Nullable
+	private volatile FarmLocation headingTo;
 
 	@Inject
 	ShortestPathRouter(EventBus eventBus)
@@ -45,6 +58,62 @@ class ShortestPathRouter
 		eventBus.post(new PluginMessage(NAMESPACE, "path", message));
 		routed = true;
 		overridingSettings = overrides;
+
+		// The path doesn't say which stop it picked, but the same search as a query does
+		headingTo = null;
+		queried = route;
+		Map<String, Object> query = new HashMap<>();
+		query.put("id", QUERY_ID);
+		query.put("target", message.get("target"));
+		eventBus.post(new PluginMessage(NAMESPACE, "query", query));
+	}
+
+	/**
+	 * The stop the shown path leads to, once Shortest Path has said; null until then, or without it.
+	 */
+	@Nullable
+	FarmLocation headingTo()
+	{
+		return headingTo;
+	}
+
+	@Subscribe
+	public void onPluginMessage(PluginMessage event)
+	{
+		Route route = queried;
+		if (!NAMESPACE.equals(event.getNamespace()) || !"result".equals(event.getName()) || route == null
+			|| !QUERY_ID.equals(event.getData().get("id")))
+		{
+			return;
+		}
+
+		Object target = event.getData().get("target");
+		if (target instanceof WorldPoint)
+		{
+			headingTo = stopAt(route, (WorldPoint) target);
+		}
+	}
+
+	/**
+	 * The stop of the route whose point Shortest Path's answer names, or the one nearest it, as the
+	 * answer can be a tile beside the point when the point itself can't be stood on.
+	 */
+	@Nullable
+	static FarmLocation stopAt(Route route, WorldPoint target)
+	{
+		FarmLocation nearest = null;
+		int nearestDistance = Integer.MAX_VALUE;
+		for (FarmLocation location : route.getStops().keySet())
+		{
+			WorldPoint point = location.pointFor(route.getRunType());
+			int distance = point.getPlane() == target.getPlane() ? point.distanceTo2D(target) : Integer.MAX_VALUE;
+			if (distance < nearestDistance)
+			{
+				nearest = location;
+				nearestDistance = distance;
+			}
+		}
+		return nearest != null && nearestDistance <= nearest.getRadius() ? nearest : null;
 	}
 
 	/**
@@ -57,6 +126,8 @@ class ShortestPathRouter
 			eventBus.post(new PluginMessage(NAMESPACE, "clear", new HashMap<>()));
 			routed = false;
 			overridingSettings = false;
+			queried = null;
+			headingTo = null;
 		}
 	}
 

@@ -231,6 +231,19 @@ public enum FarmLocation
 		return false;
 	}
 
+	/**
+	 * A run's locations in the order the OSRS Wiki's farming run guides visit them.
+	 */
+	static List<FarmLocation> recommendedOrder(RunType runType)
+	{
+		if (runType == RunType.TREE)
+		{
+			return List.of(GNOME_STRONGHOLD, TREE_GNOME_VILLAGE, FARMING_GUILD, LUMBRIDGE, VARROCK, FALADOR_PARK, TAVERLEY,
+				CATHERBY_ORCHARD, BRIMHAVEN, LLETYA, KASTORI, AUBURNVALE);
+		}
+		return List.of(FALADOR, MORYTANIA, ARDOUGNE, CATHERBY, HOSIDIUS, FARMING_GUILD, CIVITAS, TROLL_STRONGHOLD, WEISS, HARMONY);
+	}
+
 	static List<FarmLocation> of(RunType runType)
 	{
 		List<FarmLocation> locations = new ArrayList<>();

@@ -1,7 +1,6 @@
 package com.ironmanfarmrun;
 
 import java.util.Collections;
-import java.util.EnumSet;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
@@ -106,11 +105,11 @@ class RunPlan
 	Set<FarmPatch> withoutSeeds;
 
 	/**
-	 * The stops with something left to do.
+	 * The stops with something left to do, in the order they were planned.
 	 */
 	Set<FarmLocation> targets()
 	{
-		Set<FarmLocation> targets = EnumSet.noneOf(FarmLocation.class);
+		Set<FarmLocation> targets = new LinkedHashSet<>();
 		for (FarmPatch patch : steps.keySet())
 		{
 			targets.add(patch.getLocation());

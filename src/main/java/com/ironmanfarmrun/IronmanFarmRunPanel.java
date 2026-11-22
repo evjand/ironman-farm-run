@@ -8,6 +8,7 @@ import java.util.ArrayList;
 import java.util.EnumMap;
 import java.util.List;
 import java.util.Map;
+import javax.annotation.Nullable;
 import javax.swing.BoxLayout;
 import javax.swing.ButtonGroup;
 import javax.swing.JButton;
@@ -58,7 +59,6 @@ class IronmanFarmRunPanel extends PluginPanel
 		private final JCheckBox enabled;
 		private final JLabel status = new JLabel();
 		private final JComboBox<Teleport> teleport;
-		private final JButton skip = new JButton("Skip stop");
 
 		private LocationRow(FarmLocation location, JPanel block)
 		{
@@ -83,6 +83,23 @@ class IronmanFarmRunPanel extends PluginPanel
 	private final JButton startStop = new JButton();
 	private final JButton reroute = new JButton("Show path again");
 
+	/**
+	 * Holds the location blocks of the run type shown, in its recommended order.
+	 */
+	private final JPanel locations = new JPanel();
+	/**
+	 * What is set up before a run: the kind of run, its options and the locations. Hidden during a run.
+	 */
+	private final JPanel types = new JPanel(new GridLayout(1, 0, 4, 0));
+	private final JPanel setup = new JPanel();
+	/**
+	 * The stops of the run in progress. Shown only during a run.
+	 */
+	private final JPanel run = new JPanel();
+	private final JPanel stopList = new JPanel();
+	private final Listener listener;
+	@Nullable
+	private RunType shownRunType;
 	private boolean runActive;
 	/**
 	 * Set while {@link #update} is changing checkboxes and dropdowns, so those changes aren't reported as the player's.
@@ -91,6 +108,7 @@ class IronmanFarmRunPanel extends PluginPanel
 
 	IronmanFarmRunPanel(Listener listener)
 	{
+		this.listener = listener;
 		setLayout(new BorderLayout());
 		setBorder(new EmptyBorder(8, 8, 8, 8));
 
@@ -102,7 +120,6 @@ class IronmanFarmRunPanel extends PluginPanel
 		title.setForeground(Color.WHITE);
 		content.add(leftAligned(title));
 
-		JPanel types = new JPanel(new GridLayout(1, 0, 4, 0));
 		types.setBorder(new EmptyBorder(6, 0, 0, 0));
 		ButtonGroup typeGroup = new ButtonGroup();
 		for (RunType type : RunType.values())
@@ -152,7 +169,15 @@ class IronmanFarmRunPanel extends PluginPanel
 		buttons.add(reroute);
 		content.add(leftAligned(buttons));
 
-		content.add(leftAligned(sectionTitle("Run options")));
+		run.setLayout(new BoxLayout(run, BoxLayout.Y_AXIS));
+		run.add(leftAligned(sectionTitle("Stops")));
+		stopList.setLayout(new BoxLayout(stopList, BoxLayout.Y_AXIS));
+		run.add(leftAligned(stopList));
+		content.add(leftAligned(run));
+
+		setup.setLayout(new BoxLayout(setup, BoxLayout.Y_AXIS));
+		content.add(leftAligned(setup));
+		setup.add(leftAligned(sectionTitle("Run options")));
 		JPanel options = section();
 		options.setLayout(new GridLayout(0, 2, 4, 2));
 		for (RunOption option : RunOption.values())
@@ -170,9 +195,11 @@ class IronmanFarmRunPanel extends PluginPanel
 			runOptions.put(option, box);
 			options.add(box);
 		}
-		content.add(leftAligned(options));
+		setup.add(leftAligned(options));
 
-		content.add(leftAligned(sectionTitle("Locations")));
+		setup.add(leftAligned(sectionTitle("Locations")));
+		locations.setLayout(new BoxLayout(locations, BoxLayout.Y_AXIS));
+		setup.add(leftAligned(locations));
 		for (FarmLocation location : FarmLocation.values())
 		{
 			JPanel block = section();
@@ -195,14 +222,10 @@ class IronmanFarmRunPanel extends PluginPanel
 			row.teleport.addActionListener(e -> changed.run());
 			block.add(indented(row.teleport));
 
-			row.skip.setToolTipText("Leave " + location.getDisplayName() + " out of the rest of this run, for when it can't be finished");
-			row.skip.addActionListener(e -> listener.skipStop(location));
-			block.add(indented(row.skip));
-
 			// Space below each location, inside the block so it hides with it
 			block.setBorder(new CompoundBorder(new MatteBorder(0, 0, 4, 0, ColorScheme.DARK_GRAY_COLOR), block.getBorder()));
 			rows.put(location, row);
-			content.add(leftAligned(block));
+			leftAligned(block);
 		}
 
 		content.add(leftAligned(sectionTitle("Checklist")));
@@ -231,7 +254,8 @@ class IronmanFarmRunPanel extends PluginPanel
 		}
 		else if (runActive)
 		{
-			summary.setText(capitalised(runType.getNoun()) + " active: " + stops + (stops == 1 ? " stop left." : " stops left."));
+			long done = state.getRunStops().stream().filter(stop -> stop.getStage() == StopView.Stage.DONE).count();
+			summary.setText(capitalised(runType.getNoun()) + ": " + done + " of " + state.getRunStops().size() + " stops done");
 		}
 		else if (stops == 0)
 		{
@@ -245,9 +269,29 @@ class IronmanFarmRunPanel extends PluginPanel
 		contract.setText(state.getContract() == null ? "" : "Contract: " + state.getContract());
 		contract.setVisible(state.getContract() != null);
 
+		// Setting up is for before a run; during one the panel follows its stops
+		types.setVisible(!runActive);
+		setup.setVisible(!runActive);
+		run.setVisible(runActive);
+		if (runActive)
+		{
+			showStops(state.getRunStops());
+		}
+
 		startStop.setText(runActive ? "Stop " + runType.getNoun() : "Start " + runType.getNoun());
 		startStop.setEnabled(runActive || (state.isLoggedIn() && stops > 0));
 		reroute.setVisible(runActive);
+
+		if (runType != shownRunType)
+		{
+			// The locations of this kind of run, in the order its guide visits them
+			shownRunType = runType;
+			locations.removeAll();
+			for (FarmLocation location : FarmLocation.recommendedOrder(runType))
+			{
+				locations.add(rows.get(location).block);
+			}
+		}
 
 		updating = true;
 		for (Map.Entry<RunType, JToggleButton> type : runTypes.entrySet())
@@ -264,7 +308,6 @@ class IronmanFarmRunPanel extends PluginPanel
 		for (FarmLocation location : FarmLocation.values())
 		{
 			LocationRow row = rows.get(location);
-			row.block.setVisible(location.has(runType));
 			if (!location.has(runType))
 			{
 				continue;
@@ -275,7 +318,6 @@ class IronmanFarmRunPanel extends PluginPanel
 			row.enabled.setEnabled(state.isLoggedIn());
 			row.teleport.setSelectedItem(settings.getTeleport());
 			row.teleport.setEnabled(state.isLoggedIn());
-			row.skip.setVisible(runActive && state.getTargets().contains(location));
 
 			// The anchor patches decide whether a location is a stop; the tooltip has the rest
 			PatchState shown = anchorState(location, runType, state);
@@ -304,6 +346,89 @@ class IronmanFarmRunPanel extends PluginPanel
 
 		revalidate();
 		repaint();
+	}
+
+	/**
+	 * Lists the run's stops: finished ones on a single line, the current one with each patch's task
+	 * and the next one marked, and those to come on a line with how much is left to do there.
+	 */
+	private void showStops(List<StopView> views)
+	{
+		stopList.removeAll();
+		for (StopView view : views)
+		{
+			String name = view.getLocation().getDisplayName();
+			switch (view.getStage())
+			{
+				case DONE:
+					stopList.add(leftAligned(compactLine(label(name, FAINT), label("Done", GOOD))));
+					break;
+				case UPCOMING:
+					int left = view.getTasksLeft();
+					stopList.add(leftAligned(compactLine(label(name, NEUTRAL), label(left == 1 ? "1 task" : left + " tasks", NEUTRAL))));
+					break;
+				default:
+					stopList.add(leftAligned(currentStop(view)));
+					break;
+			}
+		}
+		stopList.revalidate();
+	}
+
+	private JPanel currentStop(StopView view)
+	{
+		JPanel block = new JPanel(new GridLayout(0, 1, 0, 2));
+		block.setBackground(ColorScheme.DARKER_GRAY_HOVER_COLOR);
+		block.setBorder(new CompoundBorder(
+			new CompoundBorder(new MatteBorder(4, 0, 4, 0, ColorScheme.DARK_GRAY_COLOR), new MatteBorder(0, 3, 0, 0, ColorScheme.BRAND_ORANGE)),
+			new EmptyBorder(4, 6, 4, 6)));
+
+		JLabel title = label(view.getLocation().getDisplayName(), Color.WHITE);
+		title.setFont(FontManager.getRunescapeBoldFont());
+		JLabel teleport = label(view.getTeleport() == null ? "" : view.getTeleport(), NEUTRAL);
+		teleport.setToolTipText("The teleport you picked for this stop");
+		block.add(line(title, teleport, ColorScheme.DARKER_GRAY_HOVER_COLOR));
+
+		for (StopView.Task task : view.getTasks())
+		{
+			JLabel patch = label(task.getPatch(), task.isNext() ? Color.WHITE : NEUTRAL);
+			JLabel step = label(task.isNext() ? "> " + task.getLabel() : task.getLabel(), task.getColor());
+			if (task.isNext())
+			{
+				patch.setFont(FontManager.getRunescapeBoldFont());
+				step.setFont(FontManager.getRunescapeBoldFont());
+			}
+			block.add(line(patch, step, ColorScheme.DARKER_GRAY_HOVER_COLOR));
+		}
+
+		JButton skip = new JButton("Skip stop");
+		skip.setToolTipText("Leave " + view.getLocation().getDisplayName() + " out of the rest of this run, for when it can't be finished");
+		skip.addActionListener(e -> listener.skipStop(view.getLocation()));
+		block.add(skip);
+		return block;
+	}
+
+	private static JPanel compactLine(JLabel left, JLabel right)
+	{
+		JPanel line = line(left, right, ColorScheme.DARKER_GRAY_COLOR);
+		line.setBorder(new CompoundBorder(new MatteBorder(0, 0, 1, 0, ColorScheme.DARK_GRAY_COLOR), new EmptyBorder(3, 9, 3, 6)));
+		return line;
+	}
+
+	private static JPanel line(JLabel left, JLabel right, Color background)
+	{
+		JPanel line = new JPanel(new BorderLayout(6, 0));
+		line.setBackground(background);
+		line.add(left, BorderLayout.CENTER);
+		line.add(right, BorderLayout.EAST);
+		return line;
+	}
+
+	private static JLabel label(String text, Color color)
+	{
+		JLabel label = new JLabel(text);
+		label.setForeground(color);
+		return label;
 	}
 
 	/**

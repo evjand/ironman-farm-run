@@ -157,6 +157,20 @@ public class BankAndRouteTest
 	}
 
 	@Test
+	public void shortestPathsAnswerIsMatchedToTheStopItLeadsTo()
+	{
+		Map<FarmLocation, List<Map<Integer, Integer>>> stops = new LinkedHashMap<>();
+		stops.put(FarmLocation.LUMBRIDGE, List.of());
+		stops.put(FarmLocation.FARMING_GUILD, List.of());
+		Route route = route(RunType.TREE, stops, false, false, false);
+
+		assertEquals(FarmLocation.FARMING_GUILD, ShortestPathRouter.stopAt(route, new WorldPoint(1232, 3736, 0)));
+		// A tile beside the patch, when the patch itself can't be stood on
+		assertEquals(FarmLocation.LUMBRIDGE, ShortestPathRouter.stopAt(route, new WorldPoint(3194, 3232, 0)));
+		assertNull(ShortestPathRouter.stopAt(route, new WorldPoint(3000, 3000, 0)));
+	}
+
+	@Test
 	public void pathMessageOnlyOverridesTheShortestPathSettingsItNeeds()
 	{
 		Map<FarmLocation, List<Map<Integer, Integer>>> stops = Map.of(FarmLocation.FALADOR, List.of());
@@ -238,6 +252,29 @@ public class BankAndRouteTest
 		assertEquals(List.of(), FarmLocation.MORYTANIA.teleportsFor(Teleport.NONE));
 		// A teleport that doesn't go here counts as no preference
 		assertEquals(List.of(Teleport.ECTOPHIAL, Teleport.FENKENSTRAIN_TAB), FarmLocation.MORYTANIA.teleportsFor(Teleport.ICY_BASALT));
+	}
+
+	@Test
+	public void recommendedOrderCoversEachRunsLocationsOnce()
+	{
+		for (RunType runType : RunType.values())
+		{
+			List<FarmLocation> order = FarmLocation.recommendedOrder(runType);
+			assertEquals(order.size(), new HashSet<>(order).size());
+			assertEquals(new HashSet<>(FarmLocation.of(runType)), new HashSet<>(order));
+		}
+	}
+
+	@Test
+	public void stopsFollowTheRecommendedOrderWithTheOneThePlayerIsAtFirst()
+	{
+		Set<FarmLocation> stops = Set.of(FarmLocation.HARMONY, FarmLocation.CATHERBY, FarmLocation.FALADOR, FarmLocation.HOSIDIUS);
+
+		assertEquals(List.of(FarmLocation.FALADOR, FarmLocation.CATHERBY, FarmLocation.HOSIDIUS, FarmLocation.HARMONY),
+			IronmanFarmRunPlugin.orderedStops(RunType.HERB, stops, null));
+		// Standing at the Hosidius herb patch
+		assertEquals(List.of(FarmLocation.HOSIDIUS, FarmLocation.FALADOR, FarmLocation.CATHERBY, FarmLocation.HARMONY),
+			IronmanFarmRunPlugin.orderedStops(RunType.HERB, stops, new WorldPoint(1738, 3550, 0)));
 	}
 
 	@Test

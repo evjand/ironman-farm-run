@@ -1,11 +1,7 @@
 package com.plugandplant;
 
 import com.google.inject.Provides;
-import java.awt.BasicStroke;
 import java.awt.Color;
-import java.awt.Graphics2D;
-import java.awt.RenderingHints;
-import java.awt.image.BufferedImage;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Collection;
@@ -58,6 +54,7 @@ import net.runelite.client.ui.ClientToolbar;
 import net.runelite.client.ui.ColorScheme;
 import net.runelite.client.ui.NavigationButton;
 import net.runelite.client.ui.overlay.OverlayManager;
+import net.runelite.client.util.ImageUtil;
 
 @Slf4j
 @PluginDescriptor(
@@ -208,7 +205,7 @@ public class PlugAndPlantPlugin extends Plugin implements PlugAndPlantPanel.List
 		panel = new PlugAndPlantPanel(this);
 		navButton = NavigationButton.builder()
 			.tooltip("Plug & Plant Farming")
-			.icon(navIcon())
+			.icon(ImageUtil.loadImageResource(PlugAndPlantPlugin.class, "panel_icon.png"))
 			.priority(7)
 			.panel(panel)
 			.build();
@@ -1248,21 +1245,5 @@ public class PlugAndPlantPlugin extends Plugin implements PlugAndPlantPanel.List
 			}
 		}
 		bankTagsActive = bankFilter.isAvailable();
-	}
-
-	private static BufferedImage navIcon()
-	{
-		BufferedImage image = new BufferedImage(16, 16, BufferedImage.TYPE_INT_ARGB);
-		Graphics2D g = image.createGraphics();
-		g.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
-		// A leaf on a stem
-		g.setColor(new Color(0x5F, 0xA8, 0x3A));
-		g.rotate(Math.toRadians(-45), 8, 8);
-		g.fillOval(4, 1, 8, 12);
-		g.setColor(new Color(0x2F, 0x6B, 0x1E));
-		g.setStroke(new BasicStroke(1.2f));
-		g.drawLine(8, 3, 8, 15);
-		g.dispose();
-		return image;
 	}
 }

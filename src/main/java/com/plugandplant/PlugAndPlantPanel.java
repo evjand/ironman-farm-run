@@ -115,7 +115,7 @@ class PlugAndPlantPanel extends PluginPanel
 		JPanel content = new JPanel();
 		content.setLayout(new BoxLayout(content, BoxLayout.Y_AXIS));
 
-		JLabel title = new JLabel("Farm run");
+		JLabel title = new JLabel("Plug & Plant Farming");
 		title.setFont(FontManager.getRunescapeBoldFont());
 		title.setForeground(Color.WHITE);
 		content.add(leftAligned(title));

@@ -1,4 +1,6 @@
 # Plug & Plant Farming
+<img src="icon.png" alt="Plug & Plant Farming icon: a terracotta plug whose cable is a sprout" align="right" width="96">
+
 A farm run helper that works with what you have and the plugins you already use. Bring whatever seeds and saplings
 you've got: any herb seed goes in any herb patch, and allotments and flowers are tended for as long as your seeds
 last. It plans herb runs and tree runs on top of RuneLite's own Time Tracking and Bank Tags plugins and the

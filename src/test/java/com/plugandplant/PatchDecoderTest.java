@@ -197,4 +197,12 @@ public class PatchDecoderTest
 		// A fruit tree takes six 160 minute ticks
 		assertEquals(PatchStatus.GROWING, predict(PatchType.FRUIT_TREE, "8:" + SEEN_AT, SEEN_AT).getStatus());
 	}
+
+	@Test
+	public void growingPatchIsDescribedWithTheTimeLeft()
+	{
+		assertEquals("Growing, 1h 20m", PlugAndPlantPlugin.describe(new PatchState(PatchStatus.GROWING, SEEN_AT + 80 * MINUTE), SEEN_AT));
+		assertEquals("Growing, 1m", PlugAndPlantPlugin.describe(new PatchState(PatchStatus.GROWING, SEEN_AT + 5), SEEN_AT));
+		assertEquals("Check health", PlugAndPlantPlugin.describe(new PatchState(PatchStatus.CHECK_HEALTH, 0), SEEN_AT));
+	}
 }

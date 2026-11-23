@@ -22,6 +22,7 @@ import net.runelite.api.ChatMessageType;
 import net.runelite.api.Client;
 import net.runelite.api.EnumComposition;
 import net.runelite.api.EnumID;
+import net.runelite.api.EquipmentInventorySlot;
 import net.runelite.api.GameObject;
 import net.runelite.api.GameState;
 import net.runelite.api.Item;
@@ -44,6 +45,7 @@ import net.runelite.client.eventbus.Subscribe;
 import net.runelite.client.events.ConfigChanged;
 import net.runelite.client.events.RuneScapeProfileChanged;
 import net.runelite.client.game.ItemManager;
+import net.runelite.client.game.ItemStats;
 import net.runelite.client.game.ItemVariationMapping;
 import net.runelite.client.plugins.Plugin;
 import net.runelite.client.plugins.PluginDependency;
@@ -134,6 +136,9 @@ public class PlugAndPlantPlugin extends Plugin implements PlugAndPlantPanel.List
 	private Gardeners gardeners;
 
 	@Inject
+	private Banks banks;
+
+	@Inject
 	private ShortestPathRouter router;
 
 	@Inject
@@ -172,6 +177,11 @@ public class PlugAndPlantPlugin extends Plugin implements PlugAndPlantPanel.List
 	 * The game tick since which each remaining stop has had nothing left to do.
 	 */
 	private final Map<FarmLocation, Integer> idleSince = new EnumMap<>(FarmLocation.class);
+	/**
+	 * Stops where the player has stood while there was something to do. Once those run out, the
+	 * stop is done; the wait for things to settle is only for a stop that looks done on arrival.
+	 */
+	private final Set<FarmLocation> workedStops = EnumSet.noneOf(FarmLocation.class);
 	/**
 	 * What the shown path was asked for with, or null if no path has been asked for this run.
 	 */
@@ -216,6 +226,7 @@ public class PlugAndPlantPlugin extends Plugin implements PlugAndPlantPanel.List
 		overlayManager.add(checklistOverlay);
 		eventBus.register(patchObjects);
 		eventBus.register(gardeners);
+		eventBus.register(banks);
 		eventBus.register(bankFilter);
 		eventBus.register(router);
 
@@ -224,6 +235,7 @@ public class PlugAndPlantPlugin extends Plugin implements PlugAndPlantPanel.List
 			bankFilter.register();
 			patchObjects.scan();
 			gardeners.scan();
+			banks.scan();
 			checkPlugins();
 			refresh();
 		});
@@ -238,6 +250,7 @@ public class PlugAndPlantPlugin extends Plugin implements PlugAndPlantPanel.List
 		overlayManager.remove(checklistOverlay);
 		eventBus.unregister(patchObjects);
 		eventBus.unregister(gardeners);
+		eventBus.unregister(banks);
 		eventBus.unregister(bankFilter);
 		eventBus.unregister(router);
 
@@ -247,7 +260,8 @@ public class PlugAndPlantPlugin extends Plugin implements PlugAndPlantPanel.List
 			bankFilter.unregister();
 			patchObjects.clear();
 			gardeners.clear();
-			patchOverlay.setHighlights(List.of(), List.of());
+			banks.clear();
+			patchOverlay.setHighlights(List.of(), List.of(), List.of());
 			itemHighlightOverlay.setItems(Map.of());
 			checklistOverlay.setContent(null);
 			previousStatuses.clear();
@@ -340,6 +354,7 @@ public class PlugAndPlantPlugin extends Plugin implements PlugAndPlantPanel.List
 			completedStops.clear();
 			reachedStops.clear();
 			idleSince.clear();
+			workedStops.clear();
 			route = null;
 			refresh();
 
@@ -450,6 +465,10 @@ public class PlugAndPlantPlugin extends Plugin implements PlugAndPlantPanel.List
 		RunPlan.Options options = new RunPlan.Options(runType, config.allotments(), config.flowers(),
 			config.compostStep() && carryingCompost, config.protectTrees(), farmingLevel);
 
+		if (runActive && playerPoint != null)
+		{
+			joinStopAt(runType, patches, settings, playerPoint, farmingLevel);
+		}
 		List<FarmLocation> stops = orderedStops(runType, runActive ? remainingStops() : stopsFor(runType, patches, settings, farmingLevel), playerPoint);
 		RunPlan plan = RunPlan.of(stops, patches, composted, protectedTrees, justPlanted, options, carried, contract);
 		if (runActive && playerPoint != null && updateCompletedStops(runType, plan, playerPoint, farmingLevel))
@@ -483,10 +502,11 @@ public class PlugAndPlantPlugin extends Plugin implements PlugAndPlantPanel.List
 			}
 		}
 
-		List<ChecklistItem> checklist = Checklist.build(wanted, patches, settings, carried,
+		List<ChecklistItem> checklist = new ArrayList<>(Checklist.build(wanted, patches, settings, carried,
 			new Checklist.Options(runType, config.allotments(), config.flowers(), config.compostStep(), config.protectTrees(),
 				config.volcanicAsh(), config.graceful() ? gracefulPieces : List.of()),
-			contract);
+			contract));
+		checklist.addAll(wearHints());
 
 		updateHighlights(plan, patches, contract);
 		itemHighlightOverlay.setItems(itemHighlights(plan, patches, playerPoint));
@@ -608,17 +628,53 @@ public class PlugAndPlantPlugin extends Plugin implements PlugAndPlantPanel.List
 				idleSince.putIfAbsent(location, tick);
 			}
 
+			boolean there = location.isNear(playerPoint, 0);
+			if (there && plan.hasSteps(location))
+			{
+				workedStops.add(location);
+			}
+
 			boolean anchorsDone = location.anchors(runType, farmingLevel).stream().noneMatch(plan.getSteps()::containsKey);
 			boolean left = reachedStops.contains(location) && !location.isNear(playerPoint, LEAVING_SLACK);
+			// Finishing the last task here moves on at once; a stop that looks done the moment the
+			// player arrives waits a few ticks, as the game can show a patch wrongly for a moment then
+			boolean finishedHere = workedStops.contains(location) && !plan.hasSteps(location);
 			boolean settled = idleSince.containsKey(location) && tick - idleSince.get(location) >= SETTLE_TICKS;
-			if (anchorsDone && (settled || left))
+			if (anchorsDone && (finishedHere || settled || left))
 			{
+				log.debug("{} done: {}", location, finishedHere ? "tasks finished" : left ? "left it" : "nothing to do");
 				completedStops.add(location);
 				idleSince.remove(location);
 				changed = true;
 			}
 		}
 		return changed;
+	}
+
+	/**
+	 * Makes the location the player is at a stop of the run, if its anchor patches need attention and
+	 * it isn't one yet. The run's stops are the ones predicted when it started, but a patch can turn
+	 * ready sooner than predicted, and the player knows best where they want to go.
+	 */
+	private void joinStopAt(RunType runType, Map<FarmPatch, PatchState> patches, Map<FarmLocation, LocationSettings> settings,
+		WorldPoint playerPoint, int farmingLevel)
+	{
+		for (FarmLocation location : FarmLocation.of(runType))
+		{
+			if (runStops.contains(location) || !settings.get(location).isEnabled() || !location.isNear(playerPoint, 0))
+			{
+				continue;
+			}
+			for (FarmPatch anchor : location.anchors(runType, farmingLevel))
+			{
+				if (patches.getOrDefault(anchor, PatchState.UNKNOWN).getStatus().needsVisit())
+				{
+					log.debug("{} joins the run: {} needs attention", location, anchor);
+					runStops.add(location);
+					break;
+				}
+			}
+		}
 	}
 
 	/**
@@ -818,7 +874,7 @@ public class PlugAndPlantPlugin extends Plugin implements PlugAndPlantPanel.List
 	{
 		if (!runActive || !config.highlightPatches())
 		{
-			patchOverlay.setHighlights(List.of(), List.of());
+			patchOverlay.setHighlights(List.of(), List.of(), List.of());
 			return;
 		}
 
@@ -836,22 +892,36 @@ public class PlugAndPlantPlugin extends Plugin implements PlugAndPlantPanel.List
 			}
 		}
 
-		// The gardener takes the payment, and can take down a grown tree for coins
+		// The gardener takes the payment, as soon as the tree is in, and can take down a grown tree for coins
 		List<PatchOverlay.NpcHighlight> npcHighlights = new ArrayList<>();
 		for (Map.Entry<NPC, FarmPatch> entry : gardeners.get().entrySet())
 		{
 			FarmPatch patch = entry.getValue();
 			Step step = plan.getSteps().get(patch);
-			if (step == Step.PAY)
+			if (plan.getPayable().contains(patch))
 			{
-				npcHighlights.add(new PatchOverlay.NpcHighlight(entry.getKey(), step.getColor(), stepLabel(patch, step, plan, patches, contract)));
+				npcHighlights.add(new PatchOverlay.NpcHighlight(entry.getKey(), Step.PAY.getColor(),
+					stepLabel(patch, Step.PAY, plan, patches, contract)));
 			}
 			else if (step == Step.REMOVE)
 			{
 				npcHighlights.add(new PatchOverlay.NpcHighlight(entry.getKey(), step.getColor(), "Remove for " + Checklist.REMOVAL_COINS + " coins"));
 			}
 		}
-		patchOverlay.setHighlights(highlights, npcHighlights);
+		// A patch with something to do whose object hasn't been recognised gets a box on its known tile
+		List<PatchOverlay.TileHighlight> tileHighlights = new ArrayList<>();
+		WorldPoint playerPoint = client.getLocalPlayer() == null ? null : client.getLocalPlayer().getWorldLocation();
+		for (Map.Entry<FarmPatch, Step> entry : plan.getSteps().entrySet())
+		{
+			FarmPatch patch = entry.getKey();
+			boolean anchor = patch.getType() == PatchType.HERB || patch.getType().isTree();
+			if (anchor && !labelled.contains(patch) && playerPoint != null && patch.getLocation().isNear(playerPoint, 0))
+			{
+				tileHighlights.add(new PatchOverlay.TileHighlight(patch.getPoint(), entry.getValue().getColor(),
+					stepLabel(patch, entry.getValue(), plan, patches, contract)));
+			}
+		}
+		patchOverlay.setHighlights(highlights, npcHighlights, tileHighlights);
 	}
 
 	/**
@@ -943,17 +1013,17 @@ public class PlugAndPlantPlugin extends Plugin implements PlugAndPlantPanel.List
 			Step step = plan.getSteps().get(patch);
 			if (step != null)
 			{
-				tasks.add(new StopView.Task(patch.getName(), stepLabel(patch, step, plan, patches, contract), step.getColor(), !nextFound));
+				tasks.add(new StopView.Task(shortName(patch), stepLabel(patch, step, plan, patches, contract), step.getColor(), !nextFound));
 				nextFound = true;
 			}
 			else if (plan.getWithoutSeeds().contains(patch))
 			{
-				tasks.add(new StopView.Task(patch.getName(), "No seeds", ColorScheme.MEDIUM_GRAY_COLOR, false));
+				tasks.add(new StopView.Task(shortName(patch), "No seeds", ColorScheme.MEDIUM_GRAY_COLOR, false));
 			}
 			else
 			{
 				boolean growing = patches.get(patch).getStatus() == PatchStatus.GROWING;
-				tasks.add(new StopView.Task(patch.getName(), growing ? "Done" : "-", ColorScheme.LIGHT_GRAY_COLOR, false));
+				tasks.add(new StopView.Task(shortName(patch), growing ? "Done" : "-", ColorScheme.LIGHT_GRAY_COLOR, false));
 			}
 		}
 		return tasks;
@@ -1035,6 +1105,7 @@ public class PlugAndPlantPlugin extends Plugin implements PlugAndPlantPanel.List
 
 		// At the stop the player is at: each patch they tend there and what it needs next
 		List<ChecklistOverlay.Line> steps = new ArrayList<>();
+		boolean atStop = false;
 		for (FarmLocation location : stops)
 		{
 			if (playerPoint == null || !location.isNear(playerPoint, 0))
@@ -1042,16 +1113,39 @@ public class PlugAndPlantPlugin extends Plugin implements PlugAndPlantPanel.List
 				continue;
 			}
 
+			atStop = true;
 			for (StopView.Task task : tasks(runType, location, plan, patches, options, contract))
 			{
 				steps.add(new ChecklistOverlay.Line(task.getPatch(), task.getLabel(), task.getColor()));
 			}
 		}
 
+		// Somewhere the run doesn't stop, say how its patches are doing rather than nothing at all
+		if (!atStop && playerPoint != null)
+		{
+			long now = Instant.now().getEpochSecond();
+			for (FarmLocation location : FarmLocation.of(runType))
+			{
+				if (!location.isNear(playerPoint, 0))
+				{
+					continue;
+				}
+				for (FarmPatch patch : location.anchors(runType))
+				{
+					steps.add(new ChecklistOverlay.Line(shortName(patch), describe(patches.getOrDefault(patch, PatchState.UNKNOWN), now),
+						ColorScheme.LIGHT_GRAY_COLOR));
+				}
+			}
+		}
+
+		// What to bring is for the bank; elsewhere it would only crowd the steps. Hints are for anywhere.
+		boolean atBank = playerPoint != null && (banks.isNear(playerPoint) || bankFilter.isBankOpen());
 		List<ChecklistOverlay.Line> lines = new ArrayList<>();
 		for (ChecklistItem item : checklist)
 		{
-			if (!config.checklistMissingOnly() || item.getState() != ChecklistItem.State.GOOD)
+			boolean shown = item.getState() == ChecklistItem.State.HINT
+				|| (atBank && (!config.checklistMissingOnly() || item.getState() != ChecklistItem.State.GOOD));
+			if (shown)
 			{
 				lines.add(new ChecklistOverlay.Line(item.getLabel(), item.getValue(), ChecklistOverlay.color(item.getState())));
 			}
@@ -1061,6 +1155,87 @@ public class PlugAndPlantPlugin extends Plugin implements PlugAndPlantPanel.List
 		String noun = Character.toUpperCase(runType.getNoun().charAt(0)) + runType.getNoun().substring(1);
 		String title = runActive ? noun + ": " + left + (left == 1 ? " stop left" : " stops left") : noun;
 		return new ChecklistOverlay.Content(title, steps, lines);
+	}
+
+	/**
+	 * Run items in the inventory that could be worn in a free slot instead, to make room.
+	 */
+	private List<ChecklistItem> wearHints()
+	{
+		ItemContainer inventory = client.getItemContainer(InventoryID.INV);
+		if (inventory == null)
+		{
+			return List.of();
+		}
+		ItemContainer worn = client.getItemContainer(InventoryID.WORN);
+
+		List<ChecklistItem> hints = new ArrayList<>();
+		Set<Integer> slotsSuggested = new HashSet<>();
+		for (Item item : inventory.getItems())
+		{
+			int itemId = item.getId();
+			if (itemId <= 0 || !isWearableRunItem(itemId))
+			{
+				continue;
+			}
+
+			ItemStats stats = itemManager.getItemStats(itemId);
+			if (stats == null || !stats.isEquipable() || stats.getEquipment() == null)
+			{
+				continue;
+			}
+
+			int slot = stats.getEquipment().getSlot();
+			boolean free = worn == null || worn.getItem(slot) == null;
+			// A two-handed weapon also takes the shield slot
+			if (stats.getEquipment().isTwoHanded() && worn != null && worn.getItem(EquipmentInventorySlot.SHIELD.getSlotIdx()) != null)
+			{
+				free = false;
+			}
+			if (free && slotsSuggested.add(slot))
+			{
+				hints.add(new ChecklistItem("Wear " + itemManager.getItemComposition(itemId).getName(), "Frees a space",
+					ChecklistItem.State.HINT));
+			}
+		}
+		return hints;
+	}
+
+	/**
+	 * Teleport items, graceful, magic secateurs and staves: the run items worth wearing.
+	 */
+	private boolean isWearableRunItem(int itemId)
+	{
+		if (Teleport.ALL_ITEM_IDS.contains(itemId) || itemId == ItemID.FAIRY_ENCHANTED_SECATEURS)
+		{
+			return true;
+		}
+		if (!Runes.suppliedBy(ItemVariationMapping.map(itemId)).isEmpty())
+		{
+			return true;
+		}
+		return gracefulPieces.stream().anyMatch(piece -> piece.contains(itemId));
+	}
+
+	/**
+	 * A patch's name without the "patch", to fit beside its task.
+	 */
+	private static String shortName(FarmPatch patch)
+	{
+		return patch.getName().replace(" patch", "");
+	}
+
+	/**
+	 * A patch's state in a few words, with how long a growing one has left.
+	 */
+	static String describe(PatchState state, long now)
+	{
+		if (state.getStatus() != PatchStatus.GROWING)
+		{
+			return state.getStatus().getLabel();
+		}
+		long minutes = Math.max(1, (state.getReadyAt() - now + 59) / 60);
+		return "Growing, " + (minutes >= 60 ? minutes / 60 + "h " + minutes % 60 + "m" : minutes + "m");
 	}
 
 	private void endRun()
@@ -1075,6 +1250,7 @@ public class PlugAndPlantPlugin extends Plugin implements PlugAndPlantPanel.List
 		completedStops.clear();
 		reachedStops.clear();
 		idleSince.clear();
+		workedStops.clear();
 		route = null;
 		justPlanted.clear();
 		router.clear();

@@ -17,7 +17,9 @@ The side panel says which of these are missing.
 ## Features
 - **Herb runs and tree runs.** Switch between them at the top of the side panel. A herb run stops at each location
   whose herb patch needs attention when the run starts; a tree run at each location whose tree or fruit tree does.
-  Each stop is visited once, so a patch that turns ready later in the run doesn't send you back.
+  Each stop is visited once, so a patch that turns ready later in the run doesn't send you back. Arrive somewhere
+  whose patch needs work but wasn't predicted ready, and it joins the run; arrive where nothing needs doing, and the
+  in-game box says how long the patch has left.
 - **Any seed.** A patch needs a seed of its kind and the plugin doesn't care which. If you don't carry one for the
   next stop, Shortest Path routes you through a bank first. Seeds in a seed box count once the game has shown its
   contents.
@@ -26,17 +28,20 @@ The side panel says which of these are missing.
 - **Tree runs.** Trees at Lumbridge, Varrock, Falador, Taverley, the Gnome Stronghold, Auburnvale and the Farming
   Guild, and fruit trees at the Gnome Stronghold, Tree Gnome Village, Catherby, Brimhaven, Lletya, Kastori and the
   Farming Guild. Each tree goes through checking its health, taking it down (chop it, or pay the gardener 200
-  coins), digging up the stump, planting any sapling of the right kind, and paying for protection. The checklist
-  and bank filter show the payment each carried sapling needs, and the gardener is highlighted when it is time to
-  pay. Without the payment on you, the step is skipped and the tree goes unprotected.
+  coins, or carry an axe), digging up the stump, planting any sapling of the right kind, and paying for protection.
+  The checklist counts the payment for every sapling you carry, the bank filter shows the payments, and the
+  gardener is highlighted from the moment the tree is in. Without the payment on you, the step is skipped and the
+  tree goes unprotected.
 - **Step-by-step highlights.** During a run each patch that needs something gets a box in the colour of its next
   step: Harvest, Check health, Remove, Dig up, Clear, Cure or Prune, Rake, Compost, Plant or Pay. The inventory items
   the patches you are at need next are highlighted in the same colour.
 - **Checklist.** What to bring for the rest of the run, checked off against what you carry: seeds or saplings,
-  payments, compost, tools and teleports. Tools and compost you keep with the tool leprechaun show as "At
-  leprechaun", so you can pick them up there or take them from the bank. Spell runes count those in a rune pouch,
-  combination runes, and an equipped staff or tome. The checklist is in the side panel and in a box in the game,
-  which also lists the steps at the stop you are at.
+  payments, compost, tools and teleports. What is left to fetch comes first and what you have is tucked below.
+  Tools and compost you keep with the tool leprechaun show as "At leprechaun", so you can pick them up there or take
+  them from the bank. Spell runes count those in a rune pouch, combination runes, and an equipped staff or tome. Run
+  items you could wear in a free slot, such as a teleport cloak or graceful, are suggested to make room. The
+  checklist is in the side panel, and in a box in the game while you are at a bank; away from one the box keeps to
+  the steps at the stop you are at.
 - **Bank filter.** Opening the bank during a run shows only the run's items, in sections: seeds or saplings,
   gardener payments, equipment and teleports. A button with the Farming icon at the top of the bank turns it on and
   off at any time.

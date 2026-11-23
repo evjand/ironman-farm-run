@@ -337,12 +337,40 @@ class PlugAndPlantPanel extends PluginPanel
 		}
 		updating = false;
 
+		// What is left to fetch first; what is already packed below, out of the way
 		checklist.removeAll();
+		List<ChecklistItem> packed = new ArrayList<>();
 		for (ChecklistItem item : state.getChecklist())
 		{
+			if (item.getState() == ChecklistItem.State.GOOD)
+			{
+				packed.add(item);
+				continue;
+			}
 			JLabel value = new JLabel(item.getValue());
 			value.setForeground(stateColor(item.getState()));
 			checklist.add(row(name(item.getLabel()), value));
+		}
+		if (checklist.getComponentCount() == 0)
+		{
+			JLabel ready = new JLabel("Everything is packed");
+			ready.setForeground(GOOD);
+			checklist.add(ready);
+		}
+		if (!packed.isEmpty())
+		{
+			JLabel heading = new JLabel("Packed");
+			heading.setForeground(FAINT);
+			heading.setBorder(new EmptyBorder(6, 0, 0, 0));
+			checklist.add(heading);
+			for (ChecklistItem item : packed)
+			{
+				JLabel label = name(item.getLabel());
+				label.setForeground(FAINT);
+				JLabel value = new JLabel(item.getValue());
+				value.setForeground(FAINT);
+				checklist.add(row(label, value));
+			}
 		}
 
 		revalidate();
@@ -526,6 +554,8 @@ class PlugAndPlantPanel extends PluginPanel
 				return BAD;
 			case STORED:
 				return ChecklistOverlay.STORED_COLOR;
+			case HINT:
+				return ChecklistOverlay.HINT_COLOR;
 			default:
 				return FAINT;
 		}

@@ -119,8 +119,18 @@ final class Checklist
 			{
 				int needed = removals * REMOVAL_COINS;
 				int coins = carried.count(ItemID.COINS);
-				items.add(new ChecklistItem("Coins to remove trees", coins + " / " + needed,
-					coins >= needed ? ChecklistItem.State.GOOD : ChecklistItem.State.UNSURE));
+				if (coins >= needed)
+				{
+					items.add(new ChecklistItem("Coins", coins + " / " + needed, ChecklistItem.State.GOOD));
+				}
+				else if (carried.hasAny(RunItems.AXES))
+				{
+					items.add(new ChecklistItem("Coins", coins + " / " + needed + ", axe", ChecklistItem.State.GOOD));
+				}
+				else
+				{
+					items.add(new ChecklistItem("Coins", coins + " / " + needed + " or axe", ChecklistItem.State.MISSING));
+				}
 			}
 		}
 
@@ -148,8 +158,8 @@ final class Checklist
 			}
 			else if (needed > 0)
 			{
-				// Compost is optional: patches can go without
-				items.add(new ChecklistItem("Compost", buckets + " / " + needed, ChecklistItem.State.UNSURE));
+				// The player asked to compost, so coming up short is worth a red line
+				items.add(new ChecklistItem("Compost", buckets + " / " + needed, ChecklistItem.State.MISSING));
 			}
 		}
 
@@ -230,26 +240,43 @@ final class Checklist
 	}
 
 	/**
-	 * What each tree to be paid for will cost: the tree already in the patch, or the sapling set
-	 * aside for it. Saplings that share a payment are added together.
+	 * What protecting the trees will cost: every sapling the player brings is a tree they mean to
+	 * plant and protect, and a tree planted on this run but not paid for yet still needs its payment.
+	 * Saplings that share a payment are added together.
 	 */
 	private static List<ChecklistItem> payments(RunPlan plan, Map<FarmPatch, PatchState> states, Carried carried)
 	{
 		Map<Integer, Integer> needed = new LinkedHashMap<>();
 		Map<Integer, String> names = new LinkedHashMap<>();
-		int unknown = 0;
+		for (Sapling sapling : Sapling.values())
+		{
+			int saplings = carried.count(sapling.getSapling());
+			if (saplings > 0)
+			{
+				needed.merge(sapling.getPayment(), saplings * sapling.getPaymentAmount(), Integer::sum);
+				names.putIfAbsent(sapling.getPayment(), sapling.getPaymentName());
+			}
+		}
+
+		int withoutSapling = 0;
 		for (FarmPatch patch : plan.getToPay())
 		{
-			Sapling tree = plan.getToPlant().contains(patch)
-				? (plan.getSeedsFor().containsKey(patch) ? Sapling.bySapling(plan.getSeedsFor().get(patch)) : null)
-				: states.getOrDefault(patch, PatchState.UNKNOWN).getCrop();
-			if (tree == null)
+			if (plan.getToPlant().contains(patch))
 			{
-				unknown++;
+				// Still to plant: paid for above if its sapling is carried
+				if (!plan.getSeedsFor().containsKey(patch))
+				{
+					withoutSapling++;
+				}
 				continue;
 			}
-			needed.merge(tree.getPayment(), tree.getPaymentAmount(), Integer::sum);
-			names.putIfAbsent(tree.getPayment(), tree.getPaymentName());
+
+			Sapling tree = states.getOrDefault(patch, PatchState.UNKNOWN).getCrop();
+			if (tree != null)
+			{
+				needed.merge(tree.getPayment(), tree.getPaymentAmount(), Integer::sum);
+				names.putIfAbsent(tree.getPayment(), tree.getPaymentName());
+			}
 		}
 
 		List<ChecklistItem> items = new ArrayList<>();
@@ -260,10 +287,10 @@ final class Checklist
 			items.add(new ChecklistItem("Pay: " + name, have + " / " + payment.getValue(),
 				have >= payment.getValue() ? ChecklistItem.State.GOOD : ChecklistItem.State.MISSING));
 		}
-		if (unknown > 0)
+		if (withoutSapling > 0)
 		{
 			// The payment depends on the tree, which isn't known until the player brings its sapling
-			items.add(new ChecklistItem("Pay: for " + unknown + (unknown == 1 ? " more tree" : " more trees"),
+			items.add(new ChecklistItem("Pay: for " + withoutSapling + (withoutSapling == 1 ? " more tree" : " more trees"),
 				"Bring saplings", ChecklistItem.State.UNSURE));
 		}
 		return items;

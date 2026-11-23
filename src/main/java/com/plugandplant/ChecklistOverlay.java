@@ -25,6 +25,10 @@ class ChecklistOverlay extends OverlayPanel
 	 * For items kept with the tool leprechaun: not on the player, but not missing either.
 	 */
 	static final Color STORED_COLOR = new Color(0x6C, 0xB4, 0xEE);
+	/**
+	 * For suggestions, such as wearing an item to make room.
+	 */
+	static final Color HINT_COLOR = new Color(0xE6, 0xC8, 0x6E);
 
 	@Value
 	static class Line
@@ -73,6 +77,8 @@ class ChecklistOverlay extends OverlayPanel
 				return ColorScheme.PROGRESS_ERROR_COLOR;
 			case STORED:
 				return STORED_COLOR;
+			case HINT:
+				return HINT_COLOR;
 			default:
 				return ColorScheme.LIGHT_GRAY_COLOR;
 		}

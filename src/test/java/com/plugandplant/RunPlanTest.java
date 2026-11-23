@@ -319,9 +319,16 @@ public class RunPlanTest
 		// Still on the checklist as wanted
 		assertEquals(Set.of(LUMBRIDGE_TREE), shortOne.getToPay());
 
+		assertTrue(shortOne.getPayable().isEmpty());
+
 		carried.put(ItemID.COCONUT, 25);
 		assertEquals(Step.PAY, plan(stops, TREES_PROTECTED, Set.of(LUMBRIDGE_TREE), Set.of(), Set.of(LUMBRIDGE_TREE), null)
 			.getSteps().get(LUMBRIDGE_TREE));
+
+		// The gardener can be paid before the compost goes on, so the tree is payable while its step is still compost
+		RunPlan uncomposted = plan(stops, TREES_PROTECTED, Set.of(), Set.of(), Set.of(LUMBRIDGE_TREE), null);
+		assertEquals(Step.COMPOST, uncomposted.getSteps().get(LUMBRIDGE_TREE));
+		assertEquals(Set.of(LUMBRIDGE_TREE), uncomposted.getPayable());
 	}
 
 	@Test

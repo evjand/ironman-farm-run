@@ -91,6 +91,11 @@ class RunPlan
 	 */
 	Set<FarmPatch> toPay;
 	/**
+	 * Trees planted on this run whose gardener can be paid now, with the payment to hand. Paying
+	 * doesn't wait on compost, so these are ready for the gardener whatever the patch's own step is.
+	 */
+	Set<FarmPatch> payable;
+	/**
 	 * The seed or sapling set aside from what the player carries for each patch in {@link #toPlant}
 	 * that got one.
 	 */
@@ -184,6 +189,7 @@ class RunPlan
 		Set<FarmPatch> toPlant = new LinkedHashSet<>();
 		Set<FarmPatch> toCompost = new LinkedHashSet<>();
 		Set<FarmPatch> toPay = new LinkedHashSet<>();
+		Set<FarmPatch> payable = new LinkedHashSet<>();
 		Map<FarmPatch, Integer> seedsFor = new HashMap<>();
 		Map<FarmPatch, Integer> contractSeeds = new HashMap<>();
 		Set<FarmPatch> withoutSeeds = new LinkedHashSet<>();
@@ -239,6 +245,10 @@ class RunPlan
 				// The gardener can only be paid with the payment to hand; without it the tree goes unprotected
 				Sapling tree = states.getOrDefault(patch, PatchState.UNKNOWN).getCrop();
 				boolean canPay = tree != null && carried.count(tree.getPayment()) >= tree.getPaymentAmount();
+				if (needsPayment && canPay && status == PatchStatus.GROWING && justPlanted.contains(patch))
+				{
+					payable.add(patch);
+				}
 				Step step = step(status, needsCompost, needsPayment && canPay, justPlanted.contains(patch));
 				if (step == null)
 				{
@@ -277,6 +287,7 @@ class RunPlan
 			Collections.unmodifiableSet(toPlant),
 			Collections.unmodifiableSet(toCompost),
 			Collections.unmodifiableSet(toPay),
+			Collections.unmodifiableSet(payable),
 			Collections.unmodifiableMap(seedsFor),
 			Collections.unmodifiableMap(contractSeeds),
 			Collections.unmodifiableSet(withoutSeeds));

@@ -137,7 +137,8 @@ public class ChecklistTest
 		Checklist.Options withCompost = new Checklist.Options(RunType.HERB, false, false, true, false, false, List.of());
 		items.put(ItemID.BUCKET_ULTRACOMPOST, 1);
 
-		assertEquals(new ChecklistItem("Compost", "1 / 2", ChecklistItem.State.UNSURE), find(build(withCompost), "Compost"));
+		// The player chose to compost, so being short is missing
+		assertEquals(new ChecklistItem("Compost", "1 / 2", ChecklistItem.State.MISSING), find(build(withCompost), "Compost"));
 		assertNull(find(build(PLAIN), "Compost"));
 
 		items.put(ItemID.BOTTOMLESS_COMPOST_BUCKET_FILLED, 1);
@@ -256,7 +257,12 @@ public class ChecklistTest
 		assertEquals(new ChecklistItem("Tree saplings", "2 / 2", ChecklistItem.State.GOOD), find(checklist, "Tree saplings"));
 		assertEquals(new ChecklistItem("Fruit tree saplings", "0 / 1", ChecklistItem.State.MISSING), find(checklist, "Fruit tree saplings"));
 		// A health check and a grown tree each take a removal; a stump is dug up
-		assertEquals(new ChecklistItem("Coins to remove trees", "0 / 400", ChecklistItem.State.UNSURE), find(checklist, "Coins to remove trees"));
+		assertEquals(new ChecklistItem("Coins", "0 / 400 or axe", ChecklistItem.State.MISSING),
+			find(checklist, "Coins"));
+		// An axe takes the trees down instead
+		items.put(ItemID.RUNE_AXE, 1);
+		assertEquals(new ChecklistItem("Coins", "0 / 400, axe", ChecklistItem.State.GOOD),
+			find(build(TREES), "Coins"));
 		assertNull(find(checklist, "Seed dibber"));
 		assertNull(find(checklist, "Herb seeds"));
 	}
@@ -342,5 +348,17 @@ public class ChecklistTest
 		assertEquals(Set.of(ItemID.FIRERUNE), Runes.suppliedBy(ItemID.TOME_OF_FIRE));
 		assertEquals(Set.of(), Runes.suppliedBy(ItemID.TOME_OF_FIRE_UNCHARGED));
 		assertEquals(Set.of(), Runes.suppliedBy(ItemID.SPADE));
+	}
+
+	@Test
+	public void everySaplingCarriedIsPaidForEvenBeyondTheStops()
+	{
+		// Only two fruit trees are stops, but four pineapple saplings mean four trees to protect
+		ready(FarmLocation.CATHERBY_ORCHARD.patches(PatchType.FRUIT_TREE).get(0), PatchStatus.CHECK_HEALTH);
+		ready(FarmLocation.BRIMHAVEN.patches(PatchType.FRUIT_TREE).get(0), PatchStatus.CHECK_HEALTH);
+		items.put(ItemID.PLANTPOT_PINEAPPLE_SAPLING, 4);
+		items.put(ItemID.WATERMELON, 13);
+
+		assertEquals(new ChecklistItem("Pay: watermelons", "13 / 40", ChecklistItem.State.MISSING), find(build(TREES), "Pay: watermelons"));
 	}
 }

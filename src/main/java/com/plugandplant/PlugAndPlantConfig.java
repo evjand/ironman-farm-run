@@ -205,13 +205,13 @@ public interface PlugAndPlantConfig extends Config
 	@ConfigItem(
 		keyName = "checklistMissingOnly",
 		name = "Only list what is not carried",
-		description = "Leave items you already carry out of the in-game checklist box",
+		description = "Leave items you already carry out of the in-game checklist box, so it shows only what is left to withdraw",
 		position = 4,
 		section = overlaySection
 	)
 	default boolean checklistMissingOnly()
 	{
-		return false;
+		return true;
 	}
 
 	@ConfigItem(

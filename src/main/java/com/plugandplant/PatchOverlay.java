@@ -16,6 +16,8 @@ import net.runelite.api.GameObject;
 import net.runelite.api.NPC;
 import net.runelite.api.Perspective;
 import net.runelite.api.Point;
+import net.runelite.api.coords.LocalPoint;
+import net.runelite.api.coords.WorldPoint;
 import net.runelite.client.ui.overlay.Overlay;
 import net.runelite.client.ui.overlay.OverlayLayer;
 import net.runelite.client.ui.overlay.OverlayPosition;
@@ -45,6 +47,18 @@ class PatchOverlay extends Overlay
 		String label;
 	}
 
+	/**
+	 * A patch whose object hasn't been recognised in the scene, boxed on its known tile instead so
+	 * there is always something to see.
+	 */
+	@Value
+	static class TileHighlight
+	{
+		WorldPoint point;
+		Color color;
+		String label;
+	}
+
 	@Value
 	static class NpcHighlight
 	{
@@ -59,6 +73,7 @@ class PatchOverlay extends Overlay
 	 */
 	private List<Highlight> highlights = List.of();
 	private List<NpcHighlight> npcHighlights = List.of();
+	private List<TileHighlight> tileHighlights = List.of();
 
 	@Inject
 	PatchOverlay(Client client)
@@ -68,10 +83,11 @@ class PatchOverlay extends Overlay
 		setLayer(OverlayLayer.ABOVE_SCENE);
 	}
 
-	void setHighlights(List<Highlight> highlights, List<NpcHighlight> npcHighlights)
+	void setHighlights(List<Highlight> highlights, List<NpcHighlight> npcHighlights, List<TileHighlight> tileHighlights)
 	{
 		this.highlights = highlights;
 		this.npcHighlights = npcHighlights;
+		this.tileHighlights = tileHighlights;
 	}
 
 	@Override
@@ -95,6 +111,26 @@ class PatchOverlay extends Overlay
 				{
 					OverlayUtil.renderTextLocation(graphics, location, highlight.getLabel(), color);
 				}
+			}
+		}
+
+		for (TileHighlight highlight : tileHighlights)
+		{
+			LocalPoint local = LocalPoint.fromWorld(client.getTopLevelWorldView(), highlight.getPoint());
+			if (local == null)
+			{
+				continue;
+			}
+			Color color = highlight.getColor();
+			Polygon tile = Perspective.getCanvasTileAreaPoly(client, local, 2);
+			if (tile != null)
+			{
+				OverlayUtil.renderPolygon(graphics, tile, color, fill(color), BORDER);
+			}
+			Point location = Perspective.getCanvasTextLocation(client, graphics, local, highlight.getLabel(), LABEL_HEIGHT);
+			if (location != null)
+			{
+				OverlayUtil.renderTextLocation(graphics, location, highlight.getLabel(), color);
 			}
 		}
 

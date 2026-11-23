@@ -93,9 +93,18 @@ class Gardeners
 	@Subscribe
 	public void onGameStateChanged(GameStateChanged event)
 	{
-		if (event.getGameState() != GameState.LOGGED_IN)
+		// Unlike objects, NPCs still in view aren't spawned again after the map loads a new area, so the
+		// gardeners are kept through loading and checked again once it is done
+		switch (event.getGameState())
 		{
-			gardeners.clear();
+			case LOGGED_IN:
+				scan();
+				break;
+			case LOADING:
+				break;
+			default:
+				gardeners.clear();
+				break;
 		}
 	}
 

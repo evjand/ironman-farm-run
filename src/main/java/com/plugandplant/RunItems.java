@@ -93,6 +93,17 @@ final class RunItems
 	);
 
 	/**
+	 * Axes, which take a grown tree down instead of paying its gardener.
+	 */
+	static final List<Integer> AXES = List.of(
+		ItemID.BRONZE_AXE, ItemID.IRON_AXE, ItemID.STEEL_AXE, ItemID.BLACK_AXE, ItemID.MITHRIL_AXE, ItemID.ADAMANT_AXE,
+		ItemID.RUNE_AXE, ItemID.DRAGON_AXE, ItemID.INFERNAL_AXE, ItemID.INFERNAL_AXE_EMPTY, ItemID.CRYSTAL_AXE,
+		ItemID.CRYSTAL_AXE_INACTIVE, ItemID.TRAILBLAZER_AXE,
+		ItemID.BRONZE_AXE_2H, ItemID.IRON_AXE_2H, ItemID.STEEL_AXE_2H, ItemID.BLACK_AXE_2H, ItemID.MITHRIL_AXE_2H,
+		ItemID.ADAMANT_AXE_2H, ItemID.RUNE_AXE_2H, ItemID.DRAGON_AXE_2H, ItemID.CRYSTAL_AXE_2H
+	);
+
+	/**
 	 * Tools and consumables a tree run uses on top of the shared ones: coins to have a gardener
 	 * remove a grown tree.
 	 */

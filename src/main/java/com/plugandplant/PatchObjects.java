@@ -6,6 +6,7 @@ import java.util.Map;
 import javax.annotation.Nullable;
 import javax.inject.Inject;
 import javax.inject.Singleton;
+import lombok.extern.slf4j.Slf4j;
 import net.runelite.api.Client;
 import net.runelite.api.GameObject;
 import net.runelite.api.GameState;
@@ -25,6 +26,7 @@ import net.runelite.client.eventbus.Subscribe;
  * A patch is recognised by where it is and which varbit its object changes with, the same varbit
  * Time Tracking files it under, rather than by a list of object ids.
  */
+@Slf4j
 @Singleton
 class PatchObjects
 {
@@ -110,6 +112,7 @@ class PatchObjects
 		FarmPatch patch = patchOf(object);
 		if (patch != null)
 		{
+			log.debug("Found {} at {}", patch, object.getWorldLocation());
 			objects.put(object, patch);
 		}
 	}

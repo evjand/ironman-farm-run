@@ -24,9 +24,7 @@ final class Checklist
 	@Value
 	static class Options
 	{
-		RunType runType;
-		boolean allotments;
-		boolean flowers;
+		RunPreset preset;
 		boolean compost;
 		boolean protect;
 		boolean volcanicAsh;
@@ -48,12 +46,16 @@ final class Checklist
 	{
 		List<ChecklistItem> items = new ArrayList<>();
 		boolean seedBox = carried.isSeedBoxUnknown();
-		boolean trees = options.getRunType() == RunType.TREE;
+		RunPreset preset = options.getPreset();
+		boolean trees = preset.includesTrees();
 
-		// The anchors' seeds are counted against what the stops need
-		for (PatchType type : options.getRunType().getAnchorTypes().contains(PatchType.HERB)
-			? List.of(PatchType.HERB) : List.of(PatchType.TREE, PatchType.FRUIT_TREE))
+		// The seeds of what the run visits for are counted against what the stops need
+		for (PatchType type : RunPreset.TYPES)
 		{
+			if (preset.role(type) != PatchRole.VISIT)
+			{
+				continue;
+			}
 			int needed = plan.seedsNeeded(type);
 			if (needed == 0)
 			{
@@ -76,14 +78,13 @@ final class Checklist
 			}
 		}
 
-		// Allotments and flowers take whatever seeds the player brings, so these show how far they go
-		if (!trees && options.isAllotments())
+		// What is tended while there takes whatever seeds the player brings, so these show how far they go
+		for (PatchType type : RunPreset.TYPES)
 		{
-			items.add(seedsFor(PatchType.ALLOTMENT, "Allotment seeds", carried, seedBox));
-		}
-		if (!trees && options.isFlowers())
-		{
-			items.add(seedsFor(PatchType.FLOWER, "Flower seeds", carried, seedBox));
+			if (preset.role(type) == PatchRole.TEND)
+			{
+				items.add(seedsFor(type, type.getSeedLabel(), carried, seedBox));
+			}
 		}
 
 		if (contract != null)
@@ -165,7 +166,8 @@ final class Checklist
 
 		// Tools may be with the tool leprechaun, so one that isn't carried is unsure rather than missing
 		items.add(tool("Spade", carried, List.of(ItemID.SPADE), true));
-		if (!trees)
+		boolean seedPatches = preset.includesSeedPatches();
+		if (seedPatches)
 		{
 			items.add(tool("Seed dibber", carried, List.of(ItemID.DIBBER), true));
 		}
@@ -173,14 +175,16 @@ final class Checklist
 		{
 			items.add(tool("Rake", carried, List.of(ItemID.RAKE), true));
 		}
-		if (plan.has(Step.CURE))
+		// Trees are pruned rather than cured
+		if (plan.getSteps().entrySet().stream().anyMatch(step -> step.getValue() == Step.CURE && step.getKey().getType().isTree()))
 		{
-			// Trees are pruned rather than cured
-			items.add(trees
-				? tool("Secateurs", carried, List.of(ItemID.SECATEURS, ItemID.FAIRY_ENCHANTED_SECATEURS), true)
-				: tool("Plant cure", carried, List.of(ItemID.PLANT_CURE), true));
+			items.add(tool("Secateurs", carried, List.of(ItemID.SECATEURS, ItemID.FAIRY_ENCHANTED_SECATEURS), true));
 		}
-		if (!trees)
+		if (plan.getSteps().entrySet().stream().anyMatch(step -> step.getValue() == Step.CURE && !step.getKey().getType().isTree()))
+		{
+			items.add(tool("Plant cure", carried, List.of(ItemID.PLANT_CURE), true));
+		}
+		if (seedPatches)
 		{
 			// Only a bonus to the yield, so going without isn't missing anything
 			items.add(tool("Magic secateurs", carried, List.of(ItemID.FAIRY_ENCHANTED_SECATEURS), false));
@@ -196,21 +200,24 @@ final class Checklist
 			}
 
 			boolean particular = teleports.size() == 1 && teleports.get(0) == choice;
+			boolean itemsOnly = location.itemsOnly(choice);
 			String label = particular
-				? location.getDisplayName() + ": " + shortLabel(choice)
+				? location.getDisplayName() + ": " + choice.getLabel()
 				: location.getDisplayName() + " teleport";
-			if (teleports.stream().anyMatch(carried::has))
+			if (teleports.stream().anyMatch(teleport -> carried.has(teleport, itemsOnly)))
 			{
 				items.add(new ChecklistItem(label, "Yes", ChecklistItem.State.GOOD));
 			}
-			else if (particular && !choice.isSpell())
+			else if (particular && !choice.isSpell() && !choice.isOptional())
 			{
 				items.add(new ChecklistItem(label, "Missing", ChecklistItem.State.MISSING));
 			}
 			else
 			{
-				// Runes may come from a staff, and with no particular teleport picked there may be another way there
-				items.add(new ChecklistItem(label, choice.isSpell() ? "Runes not found" : "None", ChecklistItem.State.UNSURE));
+				// Runes may come from a staff, a fairy ring may not need one, and with no particular teleport
+				// picked there may be another way there
+				String value = choice.isOptional() ? "No staff" : choice.isSpell() ? "Not found" : "None";
+				items.add(new ChecklistItem(label, value, ChecklistItem.State.UNSURE));
 			}
 		}
 
@@ -340,8 +347,4 @@ final class Checklist
 	/**
 	 * House teleports are labelled "House: tab" for the dropdown; next to a location name "House tab" reads better.
 	 */
-	private static String shortLabel(Teleport teleport)
-	{
-		return teleport.getLabel().replace("House: ", "House ");
-	}
 }

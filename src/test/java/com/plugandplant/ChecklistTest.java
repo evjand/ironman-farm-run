@@ -14,7 +14,7 @@ import org.junit.Test;
 
 public class ChecklistTest
 {
-	private static final Checklist.Options PLAIN = new Checklist.Options(RunType.HERB, false, false, false, false, false, List.of());
+	private static final Checklist.Options PLAIN = new Checklist.Options(Presets.herbs(false, false), false, false, false, List.of());
 
 	private final Map<FarmPatch, PatchState> states = new HashMap<>();
 	private final Map<FarmLocation, LocationSettings> settings = new EnumMap<>(FarmLocation.class);
@@ -42,11 +42,11 @@ public class ChecklistTest
 
 	private List<ChecklistItem> build(Checklist.Options options, FarmingContract contract)
 	{
-		RunType runType = options.getRunType();
+		RunPreset preset = options.getPreset();
 		List<FarmLocation> stops = new ArrayList<>();
-		for (FarmLocation location : FarmLocation.of(runType))
+		for (FarmLocation location : preset.locations())
 		{
-			if (location.anchors(runType).stream()
+			if (preset.anchors(location).stream()
 				.anyMatch(patch -> states.getOrDefault(patch, PatchState.UNKNOWN).getStatus().needsVisit()))
 			{
 				stops.add(location);
@@ -54,7 +54,7 @@ public class ChecklistTest
 		}
 		Carried carried = new Carried(items, pouchRunes, unlimitedRunes, stored, seedBoxUnknown);
 		RunPlan plan = RunPlan.of(stops, states, Set.of(), Set.of(), justPlanted,
-			new RunPlan.Options(runType, options.isAllotments(), options.isFlowers(), options.isCompost(), options.isProtect(), 99),
+			new RunPlan.Options(preset, options.isCompost(), options.isProtect(), 99),
 			carried, contract);
 		return Checklist.build(plan, states, settings, carried, options, contract);
 	}
@@ -97,7 +97,7 @@ public class ChecklistTest
 	@Test
 	public void allotmentAndFlowerSeedsShowHowManyPatchesTheyPlant()
 	{
-		Checklist.Options both = new Checklist.Options(RunType.HERB, true, true, false, false, false, List.of());
+		Checklist.Options both = new Checklist.Options(Presets.herbs(true, true), false, false, false, List.of());
 		ready(FarmLocation.FALADOR.patches(PatchType.HERB).get(0));
 		items.put(ItemID.WATERMELON_SEED, 7);
 		items.put(ItemID.POTATO_SEED, 3);
@@ -134,7 +134,7 @@ public class ChecklistTest
 	{
 		ready(FarmLocation.FALADOR.patches(PatchType.HERB).get(0));
 		ready(FarmLocation.CATHERBY.patches(PatchType.HERB).get(0));
-		Checklist.Options withCompost = new Checklist.Options(RunType.HERB, false, false, true, false, false, List.of());
+		Checklist.Options withCompost = new Checklist.Options(Presets.herbs(false, false), true, false, false, List.of());
 		items.put(ItemID.BUCKET_ULTRACOMPOST, 1);
 
 		// The player chose to compost, so being short is missing
@@ -202,27 +202,66 @@ public class ChecklistTest
 	public void spellRunesAreFoundInTheInventoryAndRunePouch()
 	{
 		ready(FarmLocation.FALADOR.patches(PatchType.HERB).get(0));
-		settings.put(FarmLocation.FALADOR, new LocationSettings(true, Teleport.FALADOR_SPELL));
+		settings.put(FarmLocation.FALADOR, new LocationSettings(true, Teleport.FALADOR_TELEPORT));
 
 		// Falador Teleport takes a law, three airs and a water
 		items.put(ItemID.LAWRUNE, 10);
 		items.put(ItemID.AIRRUNE, 2);
-		assertEquals(new ChecklistItem("Falador: Falador spell", "Runes not found", ChecklistItem.State.UNSURE),
-			find(build(PLAIN), "Falador: Falador spell"));
+		assertEquals(new ChecklistItem("Falador: Falador Teleport", "Not found", ChecklistItem.State.UNSURE),
+			find(build(PLAIN), "Falador: Falador Teleport"));
 
 		pouchRunes.put(ItemID.AIRRUNE, 1);
 		pouchRunes.put(ItemID.WATERRUNE, 500);
-		assertEquals(ChecklistItem.State.GOOD, find(build(PLAIN), "Falador: Falador spell").getState());
+		assertEquals(ChecklistItem.State.GOOD, find(build(PLAIN), "Falador: Falador Teleport").getState());
 	}
 
 	@Test
 	public void houseTeleportIsOfferedEverywhere()
 	{
 		ready(FarmLocation.WEISS.patches(PatchType.HERB).get(0));
-		settings.put(FarmLocation.WEISS, new LocationSettings(true, Teleport.HOUSE_TAB));
+		settings.put(FarmLocation.WEISS, new LocationSettings(true, Teleport.HOUSE));
 		items.put(ItemID.POH_TABLET_TELEPORTTOHOUSE, 3);
 
-		assertEquals(new ChecklistItem("Weiss: House tab", "Yes", ChecklistItem.State.GOOD), find(build(PLAIN), "Weiss: House tab"));
+		assertEquals(new ChecklistItem("Weiss: House", "Yes", ChecklistItem.State.GOOD), find(build(PLAIN), "Weiss: House"));
+
+		// Or the runes for the spell, or a Construction cape
+		items.clear();
+		items.put(ItemID.LAWRUNE, 1);
+		items.put(ItemID.AIRRUNE, 1);
+		items.put(ItemID.EARTHRUNE, 1);
+		assertEquals(ChecklistItem.State.GOOD, find(build(PLAIN), "Weiss: House").getState());
+	}
+
+	@Test
+	public void aSpellsTabletCountsAsTheSpell()
+	{
+		ready(FarmLocation.FALADOR.patches(PatchType.HERB).get(0));
+		settings.put(FarmLocation.FALADOR, new LocationSettings(true, Teleport.FALADOR_TELEPORT));
+		items.put(ItemID.POH_TABLET_FALADORTELEPORT, 1);
+
+		assertEquals(ChecklistItem.State.GOOD, find(build(PLAIN), "Falador: Falador Teleport").getState());
+	}
+
+	@Test
+	public void aFairyRingWithoutAStaffIsNotMissing()
+	{
+		ready(FarmLocation.MORYTANIA.patches(PatchType.HERB).get(0));
+		settings.put(FarmLocation.MORYTANIA, new LocationSettings(true, Teleport.FAIRY_RING));
+
+		assertEquals(new ChecklistItem("Morytania: Fairy ring", "No staff", ChecklistItem.State.UNSURE), find(build(PLAIN), "Morytania: Fairy ring"));
+		items.put(ItemID.DRAMEN_STAFF, 1);
+		assertEquals(ChecklistItem.State.GOOD, find(build(PLAIN), "Morytania: Fairy ring").getState());
+	}
+
+	@Test
+	public void runesDontCountForAnyTeleportItem()
+	{
+		ready(FarmLocation.MORYTANIA.patches(PatchType.HERB).get(0));
+		items.put(ItemID.LAWRUNE, 10);
+		items.put(ItemID.SOULRUNE, 10);
+		items.put(ItemID.EARTHRUNE, 10);
+
+		assertEquals(ChecklistItem.State.UNSURE, find(build(PLAIN), "Morytania teleport").getState());
 	}
 
 	@Test
@@ -234,7 +273,7 @@ public class ChecklistTest
 
 		// Two recolours of the hood count as one piece
 		List<List<Integer>> pieces = List.of(List.of(ItemID.GRACEFUL_HOOD, 13579), List.of(ItemID.GRACEFUL_TOP));
-		Checklist.Options options = new Checklist.Options(RunType.HERB, false, false, false, false, true, pieces);
+		Checklist.Options options = new Checklist.Options(Presets.herbs(false, false), false, false, true, pieces);
 		items.put(13579, 1);
 		items.put(ItemID.FOSSIL_VOLCANIC_ASH, 40);
 
@@ -243,7 +282,7 @@ public class ChecklistTest
 		assertEquals(new ChecklistItem("Volcanic ash", "40", ChecklistItem.State.GOOD), find(checklist, "Volcanic ash"));
 	}
 
-	private static final Checklist.Options TREES = new Checklist.Options(RunType.TREE, false, false, false, true, false, List.of());
+	private static final Checklist.Options TREES = new Checklist.Options(Presets.TREES, false, true, false, List.of());
 
 	@Test
 	public void treeRunAsksForSaplingsOfBothKinds()
@@ -296,7 +335,7 @@ public class ChecklistTest
 		justPlanted.add(tree);
 		Carried carried = new Carried(items, pouchRunes);
 		RunPlan plan = RunPlan.of(List.of(FarmLocation.LUMBRIDGE), states, Set.of(tree), Set.of(), justPlanted,
-			new RunPlan.Options(RunType.TREE, false, false, false, true, 99), carried, null);
+			new RunPlan.Options(Presets.TREES, false, true, 99), carried, null);
 
 		List<ChecklistItem> checklist = Checklist.build(plan, states, settings, carried, TREES, null);
 		assertEquals(new ChecklistItem("Pay: basket of oranges", "0 / 1", ChecklistItem.State.MISSING),
@@ -309,7 +348,7 @@ public class ChecklistTest
 		ready(FarmLocation.FALADOR.patches(PatchType.HERB).get(0));
 		ready(FarmLocation.CATHERBY.patches(PatchType.HERB).get(0));
 		ready(FarmLocation.ARDOUGNE.patches(PatchType.HERB).get(0));
-		Checklist.Options withCompost = new Checklist.Options(RunType.HERB, false, false, true, false, false, List.of());
+		Checklist.Options withCompost = new Checklist.Options(Presets.herbs(false, false), true, false, false, List.of());
 		items.put(ItemID.BUCKET_ULTRACOMPOST, 1);
 		stored.put(ItemID.BUCKET_SUPERCOMPOST, 5);
 
@@ -324,20 +363,20 @@ public class ChecklistTest
 	public void staffAndCombinationRunesCountTowardsASpell()
 	{
 		ready(FarmLocation.FALADOR.patches(PatchType.HERB).get(0));
-		settings.put(FarmLocation.FALADOR, new LocationSettings(true, Teleport.FALADOR_SPELL));
+		settings.put(FarmLocation.FALADOR, new LocationSettings(true, Teleport.FALADOR_TELEPORT));
 		// Falador Teleport takes a law, three airs and a water
 		items.put(ItemID.LAWRUNE, 1);
 		items.put(ItemID.WATERRUNE, 1);
-		assertEquals(ChecklistItem.State.UNSURE, find(build(PLAIN), "Falador: Falador spell").getState());
+		assertEquals(ChecklistItem.State.UNSURE, find(build(PLAIN), "Falador: Falador Teleport").getState());
 
 		unlimitedRunes.add(ItemID.AIRRUNE);
-		assertEquals(ChecklistItem.State.GOOD, find(build(PLAIN), "Falador: Falador spell").getState());
+		assertEquals(ChecklistItem.State.GOOD, find(build(PLAIN), "Falador: Falador Teleport").getState());
 
 		// Mist runes count as both air and water
 		unlimitedRunes.clear();
 		items.remove(ItemID.WATERRUNE);
 		pouchRunes.put(ItemID.MISTRUNE, 3);
-		assertEquals(ChecklistItem.State.GOOD, find(build(PLAIN), "Falador: Falador spell").getState());
+		assertEquals(ChecklistItem.State.GOOD, find(build(PLAIN), "Falador: Falador Teleport").getState());
 	}
 
 	@Test

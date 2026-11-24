@@ -21,31 +21,35 @@ public enum FarmLocation
 			.allotment("North-west allotment", VarbitID.FARMING_TRANSMIT_A)
 			.allotment("South-east allotment", VarbitID.FARMING_TRANSMIT_B)
 			.flower(VarbitID.FARMING_TRANSMIT_C),
-		Teleport.EXPLORERS_RING, Teleport.FALADOR_TAB, Teleport.FALADOR_SPELL),
+		Teleport.EXPLORERS_RING, Teleport.FALADOR_TELEPORT, Teleport.DRAYNOR_MANOR_TELEPORT, Teleport.RING_OF_WEALTH,
+		Teleport.SKILLS_NECKLACE, Teleport.AMULET_OF_GLORY, Teleport.RING_OF_THE_ELEMENTS),
 	CATHERBY("Catherby", 20,
 		new Patches(11062).herb(VarbitID.FARMING_TRANSMIT_D, new WorldPoint(2813, 3463, 0))
 			.allotment("North allotment", VarbitID.FARMING_TRANSMIT_A)
 			.allotment("South allotment", VarbitID.FARMING_TRANSMIT_B)
 			.flower(VarbitID.FARMING_TRANSMIT_C),
-		Teleport.CATHERBY_TAB, Teleport.CATHERBY_SPELL, Teleport.CAMELOT_TAB, Teleport.CAMELOT_SPELL),
+		Teleport.CATHERBY_TELEPORT, Teleport.CAMELOT_TELEPORT),
 	ARDOUGNE("Ardougne", 20,
 		new Patches(10548).herb(VarbitID.FARMING_TRANSMIT_D, new WorldPoint(2670, 3374, 0))
 			.allotment("North allotment", VarbitID.FARMING_TRANSMIT_A)
 			.allotment("South allotment", VarbitID.FARMING_TRANSMIT_B)
 			.flower(VarbitID.FARMING_TRANSMIT_C),
-		Teleport.ARDOUGNE_CLOAK, Teleport.ARDOUGNE_TAB, Teleport.ARDOUGNE_SPELL),
+		Teleport.ARDOUGNE_CLOAK, Teleport.ARDOUGNE_TELEPORT, Teleport.FISHING_GUILD_TELEPORT,
+		Teleport.SKILLS_NECKLACE, Teleport.FISHING_CAPE, Teleport.QUEST_POINT_CAPE, Teleport.COMBAT_BRACELET,
+		Teleport.FAIRY_RING),
 	MORYTANIA("Morytania", 20,
 		new Patches(14391).herb(VarbitID.FARMING_TRANSMIT_D, new WorldPoint(3605, 3529, 0))
 			.allotment("North-west allotment", VarbitID.FARMING_TRANSMIT_A)
 			.allotment("South-east allotment", VarbitID.FARMING_TRANSMIT_B)
 			.flower(VarbitID.FARMING_TRANSMIT_C),
-		Teleport.ECTOPHIAL, Teleport.FENKENSTRAIN_TAB, Teleport.FENKENSTRAIN_SPELL),
+		Teleport.ECTOPHIAL, Teleport.FENKENSTRAINS_CASTLE_TELEPORT, Teleport.KHARYRLL_TELEPORT, Teleport.FAIRY_RING),
 	HOSIDIUS("Hosidius", 20,
 		new Patches(6967).herb(VarbitID.FARMING_TRANSMIT_D, new WorldPoint(1738, 3550, 0))
 			.allotment("North-east allotment", VarbitID.FARMING_TRANSMIT_A)
 			.allotment("South-west allotment", VarbitID.FARMING_TRANSMIT_B)
 			.flower(VarbitID.FARMING_TRANSMIT_C),
-		Teleport.XERICS_TALISMAN, Teleport.HOSIDIUS_TAB),
+		Teleport.XERICS_TALISMAN, Teleport.HOSIDIUS_TAB, Teleport.CONSTRUCTION_CAPE, Teleport.KHAREDSTS_MEMOIRS,
+		Teleport.SKILLS_NECKLACE, Teleport.FAIRY_RING),
 	// The guild's patches are spread out, hence the wider radius. Its wings take a Farming level to
 	// enter: 45 for the allotments and flowers, 65 for the herb and tree, 85 for the fruit tree.
 	FARMING_GUILD("Farming Guild", 45,
@@ -56,60 +60,61 @@ public enum FarmLocation
 			.flower(VarbitID.FARMING_TRANSMIT_H)
 			.tree(VarbitID.FARMING_TRANSMIT_G, new WorldPoint(1232, 3736, 0), NpcID.FARMING_GARDENER_FARMGUILD_T2, 65)
 			.fruitTree(VarbitID.FARMING_TRANSMIT_K, new WorldPoint(1242, 3758, 0), NpcID.FARMING_GARDENER_FARMGUILD_T3, 85),
-		Teleport.SKILLS_NECKLACE, Teleport.FARMING_CAPE, Teleport.BATTLEFRONT_SPELL),
-	CIVITAS("Civitas illa Fortis", 20,
+		Teleport.FARMING_CAPE, Teleport.SKILLS_NECKLACE, Teleport.BATTLEFRONT_TELEPORT, Teleport.FAIRY_RING),
+	CIVITAS("Ortus Farm", 20,
 		new Patches(6192).herb(VarbitID.FARMING_TRANSMIT_D, new WorldPoint(1582, 3094, 0))
 			.allotment("North allotment", VarbitID.FARMING_TRANSMIT_A)
 			.allotment("South allotment", VarbitID.FARMING_TRANSMIT_B)
 			.flower(VarbitID.FARMING_TRANSMIT_C),
-		Teleport.QUETZAL_WHISTLE, Teleport.CIVITAS_TAB, Teleport.CIVITAS_SPELL),
+		Teleport.QUETZAL_WHISTLE, Teleport.HUNTER_CAPE, Teleport.CIVITAS_TELEPORT, Teleport.FAIRY_RING),
 	TROLL_STRONGHOLD("Troll Stronghold", 20,
 		new Patches(11321).herb(VarbitID.FARMING_TRANSMIT_A, new WorldPoint(2826, 3694, 0)),
-		Teleport.STONY_BASALT, Teleport.TROLLHEIM_TAB, Teleport.TROLLHEIM_SPELL),
+		Teleport.STONY_BASALT, Teleport.TROLLHEIM_TELEPORT),
 	WEISS("Weiss", 20,
 		new Patches(11325).herb(VarbitID.FARMING_TRANSMIT_A, new WorldPoint(2848, 3934, 0)),
-		Teleport.ICY_BASALT),
+		Teleport.ICY_BASALT, Teleport.RING_OF_SHADOWS, Teleport.FAIRY_RING),
 	HARMONY("Harmony Island", 20,
 		new Patches(15148).herb(VarbitID.FARMING_TRANSMIT_B, new WorldPoint(3789, 2837, 0))
 			.allotment("Allotment", VarbitID.FARMING_TRANSMIT_A),
-		Teleport.HARMONY_TAB, Teleport.HARMONY_SPELL, Teleport.ECTOPHIAL),
+		Teleport.HARMONY_TELEPORT, Teleport.MOS_LEHARMLESS_TELEPORT, Teleport.ECTOPHIAL),
 
 	LUMBRIDGE("Lumbridge", 20,
 		new Patches(12594).tree(VarbitID.FARMING_TRANSMIT_A, new WorldPoint(3193, 3231, 0), NpcID.FARMING_GARDENER_TREE_4),
-		Teleport.LUMBRIDGE_TAB, Teleport.LUMBRIDGE_SPELL),
+		Teleport.LUMBRIDGE_TELEPORT, Teleport.ACHIEVEMENT_DIARY_CAPE),
 	VARROCK("Varrock", 20,
 		new Patches(12854).tree(VarbitID.FARMING_TRANSMIT_A, new WorldPoint(3229, 3459, 0), NpcID.FARMING_GARDENER_TREE_3_02),
-		Teleport.VARROCK_TAB, Teleport.VARROCK_SPELL),
+		Teleport.VARROCK_TELEPORT, Teleport.RING_OF_WEALTH, Teleport.SKILLS_NECKLACE, Teleport.ACHIEVEMENT_DIARY_CAPE),
 	FALADOR_PARK("Falador park", 20,
 		new Patches(11828).tree(VarbitID.FARMING_TRANSMIT_A, new WorldPoint(3004, 3373, 0), NpcID.FARMING_GARDENER_TREE_2),
-		Teleport.RING_OF_WEALTH, Teleport.FALADOR_TAB, Teleport.FALADOR_SPELL),
+		Teleport.RING_OF_WEALTH, Teleport.FALADOR_TELEPORT, Teleport.SKILLS_NECKLACE, Teleport.AMULET_OF_GLORY),
 	TAVERLEY("Taverley", 20,
 		new Patches(11573).tree(VarbitID.FARMING_TRANSMIT_A, new WorldPoint(2936, 3438, 0), NpcID.FARMING_GARDENER_TREE_1),
-		Teleport.TAVERLEY_TAB, Teleport.FALADOR_TAB, Teleport.FALADOR_SPELL),
+		Teleport.TAVERLEY_TAB, Teleport.FALADOR_TELEPORT, Teleport.CONSTRUCTION_CAPE, Teleport.GAMES_NECKLACE,
+		Teleport.COMBAT_BRACELET),
 	GNOME_STRONGHOLD("Gnome Stronghold", 20,
 		new Patches(9781).tree(VarbitID.FARMING_TRANSMIT_A, new WorldPoint(2436, 3415, 0), NpcID.FARMING_GARDENER_TREE_GNOME)
 			.fruitTree(VarbitID.FARMING_TRANSMIT_B, new WorldPoint(2476, 3446, 0), NpcID.FARMING_GARDENER_FRUIT_1),
-		Teleport.ROYAL_SEED_POD),
-	AUBURNVALE("Auburnvale", 20,
+		Teleport.ROYAL_SEED_POD, Teleport.GRAND_SEED_POD, Teleport.SLAYER_RING, Teleport.NECKLACE_OF_PASSAGE,
+		Teleport.ACHIEVEMENT_DIARY_CAPE),
+	AUBURNVALE("Nemus Retreat", 20,
 		new Patches(5427).tree(VarbitID.FARMING_TRANSMIT_A, new WorldPoint(1367, 3322, 0), NpcID.FARMING_GARDENER_TREE_7),
-		Teleport.PENDANT_OF_ATES),
+		Teleport.PENDANT_OF_ATES, Teleport.QUETZAL_WHISTLE, Teleport.FAIRY_RING),
 	TREE_GNOME_VILLAGE("Tree Gnome Village", 20,
-		new Patches(9777).fruitTree(VarbitID.FARMING_TRANSMIT_A, new WorldPoint(2490, 3180, 0), NpcID.FARMING_GARDENER_FRUIT_2)),
+		new Patches(9777).fruitTree(VarbitID.FARMING_TRANSMIT_A, new WorldPoint(2490, 3180, 0), NpcID.FARMING_GARDENER_FRUIT_2),
+		Teleport.FAIRY_RING),
 	BRIMHAVEN("Brimhaven", 20,
 		new Patches(11058).fruitTree(VarbitID.FARMING_TRANSMIT_A, new WorldPoint(2765, 3213, 0), NpcID.GARTH),
-		// Brimhaven is also a boat ride from Ardougne
-		Teleport.BRIMHAVEN_TAB, Teleport.ARDOUGNE_TAB, Teleport.ARDOUGNE_SPELL),
-	CATHERBY_ORCHARD("Catherby", 20,
+		Teleport.BRIMHAVEN_TAB, Teleport.CONSTRUCTION_CAPE, Teleport.KARAMJA_GLOVES, Teleport.AMULET_OF_GLORY,
+		Teleport.ARDOUGNE_TELEPORT),
+	CATHERBY_ORCHARD("East of Catherby", 20,
 		new Patches(11317).fruitTree(VarbitID.FARMING_TRANSMIT_A, new WorldPoint(2860, 3433, 0), NpcID.FARMING_GARDENER_FRUIT_4),
-		Teleport.CATHERBY_TAB, Teleport.CATHERBY_SPELL, Teleport.CAMELOT_TAB, Teleport.CAMELOT_SPELL),
+		Teleport.CATHERBY_TELEPORT, Teleport.CAMELOT_TELEPORT),
 	LLETYA("Lletya", 20,
 		new Patches(9265).fruitTree(VarbitID.FARMING_TRANSMIT_A, new WorldPoint(2347, 3162, 0), NpcID.FARMING_GARDENER_FRUIT_TREE_5),
-		Teleport.TELEPORT_CRYSTAL),
+		Teleport.TELEPORT_CRYSTAL, Teleport.ETERNAL_TELEPORT_CRYSTAL),
 	KASTORI("Kastori", 20,
 		new Patches(5423).fruitTree(VarbitID.FARMING_TRANSMIT_B, new WorldPoint(1350, 3057, 0), NpcID.FARMING_GARDENER_FRUIT_7),
-		Teleport.PENDANT_OF_ATES);
-
-	private static final List<Teleport> HOUSE_TELEPORTS = List.of(Teleport.HOUSE_TAB, Teleport.HOUSE_SPELL, Teleport.HOUSE_CAPE);
+		Teleport.PENDANT_OF_ATES, Teleport.QUETZAL_WHISTLE);
 
 	private final String displayName;
 	/**
@@ -171,44 +176,6 @@ public enum FarmLocation
 	}
 
 	/**
-	 * The patches that make this location a stop on a run of the type: its herb patch, or its trees.
-	 */
-	List<FarmPatch> anchors(RunType runType)
-	{
-		return anchors(runType, Integer.MAX_VALUE);
-	}
-
-	/**
-	 * The anchor patches a player with the Farming level can get to.
-	 */
-	List<FarmPatch> anchors(RunType runType, int farmingLevel)
-	{
-		List<FarmPatch> anchors = new ArrayList<>();
-		for (FarmPatch patch : patches)
-		{
-			if (runType.getAnchorTypes().contains(patch.getType()) && patch.getFarmingLevel() <= farmingLevel)
-			{
-				anchors.add(patch);
-			}
-		}
-		return anchors;
-	}
-
-	boolean has(RunType runType)
-	{
-		return !anchors(runType).isEmpty();
-	}
-
-	/**
-	 * Where a run of the type goes to at this location.
-	 */
-	WorldPoint pointFor(RunType runType)
-	{
-		List<FarmPatch> anchors = anchors(runType);
-		return (anchors.isEmpty() ? patches : anchors).get(0).getPoint();
-	}
-
-	/**
 	 * Whether a point is close enough to one of the location's patches to be at the location.
 	 */
 	boolean isNear(WorldPoint other, int slack)
@@ -225,30 +192,12 @@ public enum FarmLocation
 	}
 
 	/**
-	 * A run's locations in the order the OSRS Wiki's farming run guides visit them.
+	 * The OSRS Wiki's farming run guides' orders, for herbs and for trees.
 	 */
-	static List<FarmLocation> recommendedOrder(RunType runType)
-	{
-		if (runType == RunType.TREE)
-		{
-			return List.of(GNOME_STRONGHOLD, TREE_GNOME_VILLAGE, FARMING_GUILD, LUMBRIDGE, VARROCK, FALADOR_PARK, TAVERLEY,
-				CATHERBY_ORCHARD, BRIMHAVEN, LLETYA, KASTORI, AUBURNVALE);
-		}
-		return List.of(FALADOR, MORYTANIA, ARDOUGNE, CATHERBY, HOSIDIUS, FARMING_GUILD, CIVITAS, TROLL_STRONGHOLD, WEISS, HARMONY);
-	}
-
-	static List<FarmLocation> of(RunType runType)
-	{
-		List<FarmLocation> locations = new ArrayList<>();
-		for (FarmLocation location : values())
-		{
-			if (location.has(runType))
-			{
-				locations.add(location);
-			}
-		}
-		return locations;
-	}
+	static final List<FarmLocation> HERB_ORDER = List.of(FALADOR, MORYTANIA, ARDOUGNE, CATHERBY, HOSIDIUS, FARMING_GUILD,
+		CIVITAS, TROLL_STRONGHOLD, WEISS, HARMONY);
+	static final List<FarmLocation> TREE_ORDER = List.of(GNOME_STRONGHOLD, TREE_GNOME_VILLAGE, FARMING_GUILD, LUMBRIDGE,
+		VARROCK, FALADOR_PARK, TAVERLEY, CATHERBY_ORCHARD, BRIMHAVEN, LLETYA, KASTORI, AUBURNVALE);
 
 	/**
 	 * What the player can pick as this location's teleport: any item that goes here, one teleport
@@ -259,7 +208,7 @@ public enum FarmLocation
 		List<Teleport> choices = new ArrayList<>();
 		choices.add(Teleport.ANY);
 		choices.addAll(teleports);
-		choices.addAll(HOUSE_TELEPORTS);
+		choices.add(Teleport.HOUSE);
 		choices.add(Teleport.NONE);
 		return choices;
 	}
@@ -267,7 +216,7 @@ public enum FarmLocation
 	/**
 	 * The teleports that satisfy a choice: carrying any one of them is enough. A choice that doesn't
 	 * go to this location is treated as {@link Teleport#ANY}, which is any of this location's
-	 * teleport items but not its spells.
+	 * teleport items; only their items count then, not a spell's runes (see {@link #itemsOnly}).
 	 */
 	List<Teleport> teleportsFor(Teleport choice)
 	{
@@ -275,7 +224,7 @@ public enum FarmLocation
 		{
 			return List.of();
 		}
-		if (teleports.contains(choice) || HOUSE_TELEPORTS.contains(choice))
+		if (teleports.contains(choice) || choice == Teleport.HOUSE)
 		{
 			return List.of(choice);
 		}
@@ -283,12 +232,21 @@ public enum FarmLocation
 		List<Teleport> items = new ArrayList<>();
 		for (Teleport teleport : teleports)
 		{
-			if (!teleport.isSpell())
+			if (!teleport.getItemIds().isEmpty() && !teleport.isOptional())
 			{
 				items.add(teleport);
 			}
 		}
 		return items;
+	}
+
+	/**
+	 * Whether only teleport items satisfy the choice, as for {@link Teleport#ANY}: carrying runes that
+	 * happen to cast a spell here doesn't mean the player brought them for it.
+	 */
+	boolean itemsOnly(Teleport choice)
+	{
+		return choice != Teleport.HOUSE && !teleports.contains(choice);
 	}
 
 	/**

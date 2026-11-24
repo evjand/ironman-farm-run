@@ -135,10 +135,10 @@ public class BankAndRouteTest
 		assertTrue(arrangement.getHeadingRows().isEmpty());
 	}
 
-	private static Route route(RunType runType, Map<FarmLocation, List<Map<Integer, Integer>>> stops, boolean carriedOnly,
+	private static Route route(RunPreset preset, Map<FarmLocation, List<Map<Integer, Integer>>> stops, boolean carriedOnly,
 		boolean house, boolean spells)
 	{
-		return new Route(runType, stops, carriedOnly, house, spells, Set.of());
+		return new Route(preset, stops, carriedOnly, house, spells, false, Set.of());
 	}
 
 	@Test
@@ -148,7 +148,7 @@ public class BankAndRouteTest
 		stops.put(FarmLocation.FALADOR, List.of());
 		stops.put(FarmLocation.WEISS, List.of());
 
-		Map<String, Object> data = ShortestPathRouter.pathMessage(route(RunType.HERB, stops, false, false, false));
+		Map<String, Object> data = ShortestPathRouter.pathMessage(route(Presets.HERBS, stops, false, false, false));
 
 		assertEquals(List.of(new WorldPoint(3058, 3311, 0), new WorldPoint(2848, 3934, 0)), data.get("target"));
 		assertNull(data.get("config"));
@@ -162,7 +162,7 @@ public class BankAndRouteTest
 		stops.put(FarmLocation.FARMING_GUILD, List.of(Map.of(ItemID.IRIT_SEED, 1)));
 		stops.put(FarmLocation.WEISS, List.of());
 
-		List<Object> targets = (List<Object>) ShortestPathRouter.pathMessage(route(RunType.HERB, stops, false, false, false)).get("target");
+		List<Object> targets = (List<Object>) ShortestPathRouter.pathMessage(route(Presets.HERBS, stops, false, false, false)).get("target");
 
 		assertEquals(2, targets.size());
 		Map<String, Object> guild = (Map<String, Object>) targets.get(0);
@@ -177,7 +177,7 @@ public class BankAndRouteTest
 	{
 		Map<FarmLocation, List<Map<Integer, Integer>>> stops = Map.of(FarmLocation.FARMING_GUILD, List.of());
 
-		List<Object> targets = (List<Object>) ShortestPathRouter.pathMessage(route(RunType.TREE, stops, false, false, false)).get("target");
+		List<Object> targets = (List<Object>) ShortestPathRouter.pathMessage(route(Presets.TREES, stops, false, false, false)).get("target");
 
 		assertEquals(List.of(new WorldPoint(1232, 3736, 0)), targets);
 	}
@@ -188,7 +188,7 @@ public class BankAndRouteTest
 		Map<FarmLocation, List<Map<Integer, Integer>>> stops = new LinkedHashMap<>();
 		stops.put(FarmLocation.LUMBRIDGE, List.of());
 		stops.put(FarmLocation.FARMING_GUILD, List.of());
-		Route route = route(RunType.TREE, stops, false, false, false);
+		Route route = route(Presets.TREES, stops, false, false, false);
 
 		assertEquals(FarmLocation.FARMING_GUILD, ShortestPathRouter.stopAt(route, new WorldPoint(1232, 3736, 0)));
 		// A tile beside the patch, when the patch itself can't be stood on
@@ -202,9 +202,9 @@ public class BankAndRouteTest
 		Map<FarmLocation, List<Map<Integer, Integer>>> stops = Map.of(FarmLocation.FALADOR, List.of());
 
 		assertEquals(Map.of("useTeleportationItems", "Inventory"),
-			ShortestPathRouter.pathMessage(route(RunType.HERB, stops, true, false, false)).get("config"));
+			ShortestPathRouter.pathMessage(route(Presets.HERBS, stops, true, false, false)).get("config"));
 		assertEquals(Map.of("usePoh", true, "useTeleportationSpells", true),
-			ShortestPathRouter.pathMessage(route(RunType.HERB, stops, false, true, true)).get("config"));
+			ShortestPathRouter.pathMessage(route(Presets.HERBS, stops, false, true, true)).get("config"));
 	}
 
 	@Test
@@ -241,14 +241,14 @@ public class BankAndRouteTest
 	@Test
 	public void eachRunHasItsLocations()
 	{
-		assertEquals(10, FarmLocation.of(RunType.HERB).size());
+		assertEquals(10, Presets.HERBS.locations().size());
 		// The guild and the Gnome Stronghold each have a tree and a fruit tree
-		assertEquals(12, FarmLocation.of(RunType.TREE).size());
-		assertTrue(FarmLocation.of(RunType.TREE).contains(FarmLocation.FARMING_GUILD));
-		assertFalse(FarmLocation.of(RunType.HERB).contains(FarmLocation.LUMBRIDGE));
-		for (FarmLocation location : FarmLocation.of(RunType.TREE))
+		assertEquals(12, Presets.TREES.locations().size());
+		assertTrue(Presets.TREES.locations().contains(FarmLocation.FARMING_GUILD));
+		assertFalse(Presets.HERBS.locations().contains(FarmLocation.LUMBRIDGE));
+		for (FarmLocation location : Presets.TREES.locations())
 		{
-			for (FarmPatch tree : location.anchors(RunType.TREE))
+			for (FarmPatch tree : Presets.TREES.anchors(location))
 			{
 				assertTrue(tree.toString(), tree.getGardener() > 0);
 			}
@@ -264,7 +264,7 @@ public class BankAndRouteTest
 			assertEquals(Teleport.ANY, choices.get(0));
 			assertEquals(Teleport.NONE, choices.get(choices.size() - 1));
 			assertEquals(location.getTeleports(), choices.subList(1, 1 + location.getTeleports().size()));
-			assertTrue(choices.containsAll(List.of(Teleport.HOUSE_TAB, Teleport.HOUSE_SPELL, Teleport.HOUSE_CAPE)));
+			assertEquals(Teleport.HOUSE, choices.get(choices.size() - 2));
 			assertEquals(choices.size(), new HashSet<>(choices).size());
 		}
 	}
@@ -272,23 +272,30 @@ public class BankAndRouteTest
 	@Test
 	public void anyTeleportMeansTheLocationsItemsButNotItsSpells()
 	{
-		assertEquals(List.of(Teleport.ECTOPHIAL, Teleport.FENKENSTRAIN_TAB), FarmLocation.MORYTANIA.teleportsFor(Teleport.ANY));
-		assertEquals(List.of(Teleport.FENKENSTRAIN_SPELL), FarmLocation.MORYTANIA.teleportsFor(Teleport.FENKENSTRAIN_SPELL));
-		assertEquals(List.of(Teleport.HOUSE_SPELL), FarmLocation.MORYTANIA.teleportsFor(Teleport.HOUSE_SPELL));
+		// Items, a spell's tablet among them, but not a fairy ring, which may not need anything
+		List<Teleport> anyItem = List.of(Teleport.ECTOPHIAL, Teleport.FENKENSTRAINS_CASTLE_TELEPORT, Teleport.KHARYRLL_TELEPORT);
+		assertEquals(anyItem, FarmLocation.MORYTANIA.teleportsFor(Teleport.ANY));
+		assertTrue(FarmLocation.MORYTANIA.itemsOnly(Teleport.ANY));
+		assertEquals(List.of(Teleport.FENKENSTRAINS_CASTLE_TELEPORT), FarmLocation.MORYTANIA.teleportsFor(Teleport.FENKENSTRAINS_CASTLE_TELEPORT));
+		assertFalse(FarmLocation.MORYTANIA.itemsOnly(Teleport.FENKENSTRAINS_CASTLE_TELEPORT));
+		assertEquals(List.of(Teleport.HOUSE), FarmLocation.MORYTANIA.teleportsFor(Teleport.HOUSE));
 		assertEquals(List.of(), FarmLocation.MORYTANIA.teleportsFor(Teleport.NONE));
 		// A teleport that doesn't go here counts as no preference
-		assertEquals(List.of(Teleport.ECTOPHIAL, Teleport.FENKENSTRAIN_TAB), FarmLocation.MORYTANIA.teleportsFor(Teleport.ICY_BASALT));
+		assertEquals(anyItem, FarmLocation.MORYTANIA.teleportsFor(Teleport.ICY_BASALT));
 	}
 
 	@Test
 	public void recommendedOrderCoversEachRunsLocationsOnce()
 	{
-		for (RunType runType : RunType.values())
+		for (RunPreset preset : List.of(Presets.HERBS, Presets.TREES))
 		{
-			List<FarmLocation> order = FarmLocation.recommendedOrder(runType);
+			List<FarmLocation> order = preset.recommendedOrder();
 			assertEquals(order.size(), new HashSet<>(order).size());
-			assertEquals(new HashSet<>(FarmLocation.of(runType)), new HashSet<>(order));
+			assertEquals(FarmLocation.values().length, order.size());
 		}
+		// Each run starts where its guide does
+		assertEquals(FarmLocation.FALADOR, Presets.HERBS.locations().get(0));
+		assertEquals(FarmLocation.GNOME_STRONGHOLD, Presets.TREES.locations().get(0));
 	}
 
 	@Test
@@ -297,24 +304,44 @@ public class BankAndRouteTest
 		Set<FarmLocation> stops = Set.of(FarmLocation.HARMONY, FarmLocation.CATHERBY, FarmLocation.FALADOR, FarmLocation.HOSIDIUS);
 
 		assertEquals(List.of(FarmLocation.FALADOR, FarmLocation.CATHERBY, FarmLocation.HOSIDIUS, FarmLocation.HARMONY),
-			PlugAndPlantPlugin.orderedStops(RunType.HERB, stops, null));
+			PlugAndPlantPlugin.orderedStops(Presets.HERBS, stops, null));
 		// Standing at the Hosidius herb patch
 		assertEquals(List.of(FarmLocation.HOSIDIUS, FarmLocation.FALADOR, FarmLocation.CATHERBY, FarmLocation.HARMONY),
-			PlugAndPlantPlugin.orderedStops(RunType.HERB, stops, new WorldPoint(1738, 3550, 0)));
+			PlugAndPlantPlugin.orderedStops(Presets.HERBS, stops, new WorldPoint(1738, 3550, 0)));
 	}
 
 	@Test
 	public void brimhavenCanBeReachedThroughArdougne()
 	{
-		assertTrue(FarmLocation.BRIMHAVEN.getTeleports().containsAll(List.of(Teleport.ARDOUGNE_TAB, Teleport.ARDOUGNE_SPELL)));
+		assertTrue(FarmLocation.BRIMHAVEN.getTeleports().contains(Teleport.ARDOUGNE_TELEPORT));
 	}
 
 	@Test
 	public void spellShowsItsRunesAndRunePouchesInTheBank()
 	{
-		Collection<Integer> items = Teleport.FALADOR_SPELL.bankItemIds();
-		assertTrue(items.containsAll(Set.of(ItemID.LAWRUNE, ItemID.AIRRUNE, ItemID.WATERRUNE, ItemID.BH_RUNE_POUCH)));
+		Collection<Integer> items = Teleport.FALADOR_TELEPORT.bankItemIds();
+		assertTrue(items.containsAll(Set.of(ItemID.POH_TABLET_FALADORTELEPORT, ItemID.LAWRUNE, ItemID.AIRRUNE, ItemID.WATERRUNE,
+			ItemID.BH_RUNE_POUCH)));
 		assertFalse(items.contains(ItemID.FIRERUNE));
-		assertEquals(Set.of(ItemID.TELETAB_FENK), Teleport.FENKENSTRAIN_TAB.bankItemIds());
+		assertEquals(Set.of(ItemID.ECTOPHIAL, ItemID.ECTOPHIAL_EMPTY), Teleport.ECTOPHIAL.bankItemIds());
+	}
+
+	@Test
+	public void choicesSavedByEarlierVersionsAreKept()
+	{
+		assertEquals(Teleport.FALADOR_TELEPORT, Teleport.fromSaved("FALADOR_TAB"));
+		assertEquals(Teleport.FALADOR_TELEPORT, Teleport.fromSaved("FALADOR_SPELL"));
+		assertEquals(Teleport.HOUSE, Teleport.fromSaved("HOUSE_CAPE"));
+		assertEquals(Teleport.ECTOPHIAL, Teleport.fromSaved("ECTOPHIAL"));
+		assertNull(Teleport.fromSaved("SOMETHING_NEW"));
+	}
+
+	@Test
+	public void everyLocationHasAWayThere()
+	{
+		for (FarmLocation location : FarmLocation.values())
+		{
+			assertFalse(location + " has no teleports", location.getTeleports().isEmpty());
+		}
 	}
 }

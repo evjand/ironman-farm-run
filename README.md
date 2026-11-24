@@ -15,19 +15,22 @@ Shortest Path plugin, so there's nothing to set up beyond picking what to bring.
 The side panel says which of these are missing.
 
 ## Features
-- **Herb runs and tree runs.** Switch between them at the top of the side panel. A herb run stops at each location
-  whose herb patch needs attention when the run starts; a tree run at each location whose tree or fruit tree does.
-  Each stop is visited once, so a patch that turns ready later in the run doesn't send you back. Arrive somewhere
-  whose patch needs work but wasn't predicted ready, and it joins the run; arrive where nothing needs doing, and the
-  in-game box says how long the patch has left.
+- **Runs of your own.** A herb run and a tree run are ready to go; pick one at the top of the side panel, or make
+  your own with New. A run sets each kind of patch (herbs, flowers, allotments, trees, fruit trees) to "Visit for",
+  "Tend while there" or off. A location becomes a stop when a patch it visits for needs attention when the run
+  starts, and patches it tends get done at the stops it makes anyway, while your seeds last. Each location can be
+  left out, or have a kind of patch left out, such as the fruit tree at the Farming Guild, right from its card in
+  the side panel; the run remembers it. Each stop is visited once, so a patch that turns ready later in the run
+  doesn't send you back. Arrive somewhere whose patch needs work but wasn't predicted ready, and it joins the run;
+  arrive where nothing needs doing, and the in-game box says how long the patch has left.
 - **Any seed.** A patch needs a seed of its kind and the plugin doesn't care which. If you don't carry one for the
   next stop, Shortest Path routes you through a bank first. Seeds in a seed box count once the game has shown its
   contents.
-- **Run options.** Before a run, pick in the side panel what it includes: compost, allotments, flowers, gardener
-  payments, graceful and volcanic ash. An allotment takes three seeds of one kind.
-- **Tree runs.** Trees at Lumbridge, Varrock, Falador, Taverley, the Gnome Stronghold, Auburnvale and the Farming
-  Guild, and fruit trees at the Gnome Stronghold, Tree Gnome Village, Catherby, Brimhaven, Lletya, Kastori and the
-  Farming Guild. A watered seedling counts as a sapling, as it will have grown into one by the time you plant it.
+- **Run options.** Each run also remembers whether to compost, pay gardeners, and bring graceful and volcanic ash.
+  An allotment takes three seeds of one kind.
+- **Tree runs.** Trees at Lumbridge, Varrock, Falador, Taverley, the Gnome Stronghold, Nemus Retreat and the
+  Farming Guild, and fruit trees at the Gnome Stronghold, Tree Gnome Village, east of Catherby, Brimhaven, Lletya,
+  Kastori and the Farming Guild. A watered seedling counts as a sapling, as it will have grown into one by the time you plant it.
   Each tree goes through checking its health, taking it down (chop it, or pay the gardener 200
   coins, or carry an axe), digging up the stump, planting any sapling of the right kind, and paying for protection.
   The checklist counts the payment for every sapling you carry, the bank filter shows the payments, and the
@@ -48,13 +51,19 @@ The side panel says which of these are missing.
   worn first, so you can take it and put it on before the rest, then equipment, seeds or saplings, gardener
   payments and teleports. A tree run adds the seeds still on their way to becoming saplings, with plant pots, a
   trowel and watering cans. A button with the Farming icon at the top of the bank turns it on and off at any time.
-- **Preferred teleports.** Pick what to bring for each location: any teleport item that goes there, one in
-  particular, the runes for a teleport spell, a way into your house, or nothing. During a run Shortest Path is
-  limited to the teleport items you carry, so the route follows what you brought.
+  Under "Bank filter items" at the bottom of the side panel you can list items to always show, in a section of
+  their own, and items to never show, by name or item ID; * in a name matches any text, so "Ring of dueling*"
+  covers every charge. This also covers new items the plugin doesn't know about yet.
+- **Preferred teleports.** Pick what to bring for each location, shared by every run: any teleport item that goes
+  there, one in particular, your house, a fairy ring, or nothing. Teleports are named after their item or spell; a
+  spell with a tablet, such as Falador Teleport, is one choice that the tablet or the runes satisfy, and the bank
+  filter shows both. House takes a house tablet, the Teleport to House runes or a Construction cape. During a run
+  Shortest Path is limited to the teleport items you carry, so the route follows what you brought.
 - **Stop order.** A setting picks how the next stop is chosen: whichever is quickest to reach from where you are
   (the default), or the order of the OSRS Wiki's farming run guides.
-- **Farming contracts.** If your Farming Guild contract is for a crop a run grows and the guild is on that run, the
-  guild's patch is planned with the contract seed or sapling.
+- **Farming contracts.** If your Farming Guild contract is for a crop a run grows (a seed crop on a run with seed
+  patches, a tree on one with trees) and the guild is on that run, the guild's patch is planned with the contract
+  seed or sapling.
 - **Farming Guild tiers.** Guild patches above your Farming level (boosts count) are left out.
 
 During a run the panel follows it: finished stops shrink to a line each, the stop you are at or headed to shows each
@@ -63,7 +72,7 @@ can't be finished, its "Skip stop" button leaves it out of the rest of the run.
 
 ## Limitations
 - Patches you haven't visited since they last changed are as Time Tracking predicts them.
-- Tree Gnome Village has no teleport item to pick; Shortest Path still routes there by spirit tree.
+- Tree Gnome Village has no teleport item; pick the fairy ring, or let Shortest Path route there by spirit tree.
 - Calquat, celastrus, hardwood, spirit tree, hops and bush patches aren't part of a run.
 
 ## Development

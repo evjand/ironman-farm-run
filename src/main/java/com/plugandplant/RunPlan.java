@@ -27,9 +27,7 @@ class RunPlan
 	@Value
 	static class Options
 	{
-		RunType runType;
-		boolean allotments;
-		boolean flowers;
+		RunPreset preset;
 		/**
 		 * Whether composting is a step, which takes the player carrying compost.
 		 */
@@ -48,29 +46,17 @@ class RunPlan
 		 */
 		boolean includes(FarmPatch patch)
 		{
-			return includes(patch.getType()) && patch.getFarmingLevel() <= farmingLevel;
+			return preset.role(patch) != PatchRole.OFF && patch.getFarmingLevel() <= farmingLevel;
 		}
+	}
 
-		boolean includes(PatchType type)
-		{
-			if (runType.getAnchorTypes().contains(type))
-			{
-				return true;
-			}
-			if (runType != RunType.HERB)
-			{
-				return false;
-			}
-			switch (type)
-			{
-				case ALLOTMENT:
-					return allotments;
-				case FLOWER:
-					return flowers;
-				default:
-					return false;
-			}
-		}
+	/**
+	 * Whether a contract for the type is grown on the run: one with trees for a tree, otherwise one with
+	 * seed patches, even if it doesn't tend that kind of patch itself.
+	 */
+	static boolean covers(RunPreset preset, PatchType contractType)
+	{
+		return contractType.isTree() ? preset.includesTrees() : preset.includesSeedPatches();
 	}
 
 	/**
@@ -196,9 +182,9 @@ class RunPlan
 
 		// A contract is grown on the run of its kind
 		Set<FarmPatch> contractPatches = new HashSet<>();
-		if (contract != null && RunType.of(contract.getType()) == options.getRunType())
+		if (contract != null && covers(options.getPreset(), contract.getType()))
 		{
-			for (FarmPatch patch : contract.patches(options.includes(contract.getType())))
+			for (FarmPatch patch : contract.patches(options.getPreset().includes(contract.getType())))
 			{
 				if (patch.getFarmingLevel() <= options.getFarmingLevel())
 				{
@@ -232,7 +218,7 @@ class RunPlan
 					}
 					// The anchor patches are why the location is a stop, and a contract is a commitment, so
 					// those are planned whatever is carried; other patches only while seeds last
-					boolean anchor = options.getRunType().getAnchorTypes().contains(patch.getType());
+					boolean anchor = options.getPreset().role(patch) == PatchRole.VISIT;
 					if (seed == null && !seedBox && !anchor && !contractPatch)
 					{
 						withoutSeeds.add(patch);

@@ -21,11 +21,11 @@ public class RunPlanTest
 	private static final FarmPatch GUILD_HERB = FarmLocation.FARMING_GUILD.patches(PatchType.HERB).get(0);
 	private static final FarmPatch GUILD_ALLOTMENT = FarmLocation.FARMING_GUILD.patches(PatchType.ALLOTMENT).get(0);
 
-	private static final RunPlan.Options HERBS = new RunPlan.Options(RunType.HERB, false, false, false, false, 99);
-	private static final RunPlan.Options EVERYTHING = new RunPlan.Options(RunType.HERB, true, true, false, false, 99);
-	private static final RunPlan.Options COMPOST = new RunPlan.Options(RunType.HERB, false, false, true, false, 99);
-	private static final RunPlan.Options TREES = new RunPlan.Options(RunType.TREE, true, true, false, false, 99);
-	private static final RunPlan.Options TREES_PROTECTED = new RunPlan.Options(RunType.TREE, false, false, true, true, 99);
+	private static final RunPlan.Options HERBS = new RunPlan.Options(Presets.herbs(false, false), false, false, 99);
+	private static final RunPlan.Options EVERYTHING = new RunPlan.Options(Presets.herbs(true, true), false, false, 99);
+	private static final RunPlan.Options COMPOST = new RunPlan.Options(Presets.herbs(false, false), true, false, 99);
+	private static final RunPlan.Options TREES = new RunPlan.Options(Presets.TREES, false, false, 99);
+	private static final RunPlan.Options TREES_PROTECTED = new RunPlan.Options(Presets.TREES, true, true, 99);
 
 	private static final FarmPatch LUMBRIDGE_TREE = FarmLocation.LUMBRIDGE.patches(PatchType.TREE).get(0);
 	private static final FarmPatch GUILD_TREE = FarmLocation.FARMING_GUILD.patches(PatchType.TREE).get(0);
@@ -68,7 +68,7 @@ public class RunPlanTest
 		set(FarmLocation.HOSIDIUS.patches(PatchType.HERB).get(0), PatchStatus.EMPTY);
 		set(FarmLocation.FARMING_GUILD.patches(PatchType.HERB).get(0), PatchStatus.GROWING);
 
-		RunPlan plan = plan(FarmLocation.of(RunType.HERB), HERBS);
+		RunPlan plan = plan(Presets.HERBS.locations(), HERBS);
 
 		assertEquals(Step.HARVEST, plan.getSteps().get(FarmLocation.FALADOR.patches(PatchType.HERB).get(0)));
 		assertEquals(Step.CLEAR, plan.getSteps().get(FarmLocation.CATHERBY.patches(PatchType.HERB).get(0)));
@@ -242,7 +242,7 @@ public class RunPlanTest
 		set(FarmLocation.FALADOR_PARK.patches(PatchType.TREE).get(0), PatchStatus.STUMP);
 		set(FarmLocation.TAVERLEY.patches(PatchType.TREE).get(0), PatchStatus.DISEASED);
 
-		RunPlan plan = plan(FarmLocation.of(RunType.TREE), TREES);
+		RunPlan plan = plan(Presets.TREES.locations(), TREES);
 
 		assertEquals(Step.CHECK_HEALTH, plan.getSteps().get(LUMBRIDGE_TREE));
 		assertEquals(Step.REMOVE, plan.getSteps().get(FarmLocation.VARROCK.patches(PatchType.TREE).get(0)));
@@ -341,11 +341,11 @@ public class RunPlanTest
 		carried.put(ItemID.POTATO_SEED, 3);
 		List<FarmLocation> guild = List.of(FarmLocation.FARMING_GUILD);
 
-		assertEquals(Set.of(GUILD_TREE), plan(guild, new RunPlan.Options(RunType.TREE, false, false, false, false, 80)).getSteps().keySet());
-		assertEquals(Set.of(GUILD_TREE, GUILD_FRUIT_TREE), plan(guild, new RunPlan.Options(RunType.TREE, false, false, false, false, 85)).getSteps().keySet());
-		assertTrue(plan(guild, new RunPlan.Options(RunType.TREE, false, false, false, false, 64)).getSteps().isEmpty());
-		assertEquals(Set.of(GUILD_ALLOTMENT), plan(guild, new RunPlan.Options(RunType.HERB, true, false, false, false, 50)).getSteps().keySet());
+		assertEquals(Set.of(GUILD_TREE), plan(guild, new RunPlan.Options(Presets.TREES, false, false, 80)).getSteps().keySet());
+		assertEquals(Set.of(GUILD_TREE, GUILD_FRUIT_TREE), plan(guild, new RunPlan.Options(Presets.TREES, false, false, 85)).getSteps().keySet());
+		assertTrue(plan(guild, new RunPlan.Options(Presets.TREES, false, false, 64)).getSteps().isEmpty());
+		assertEquals(Set.of(GUILD_ALLOTMENT), plan(guild, new RunPlan.Options(Presets.herbs(true, false), false, false, 50)).getSteps().keySet());
 
-		assertEquals(List.of(GUILD_TREE), FarmLocation.FARMING_GUILD.anchors(RunType.TREE, 80));
+		assertEquals(List.of(GUILD_TREE), Presets.TREES.anchors(FarmLocation.FARMING_GUILD, 80));
 	}
 }

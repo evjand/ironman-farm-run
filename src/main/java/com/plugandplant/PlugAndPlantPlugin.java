@@ -72,9 +72,6 @@ public class PlugAndPlantPlugin extends Plugin implements PlugAndPlantPanel.List
 
 	// Per-account choices for a location; each key ends in the location's enum name, and those for
 	// tree runs start with the tree prefix
-	private static final String ENABLED_KEY_PREFIX = "patch.";
-	private static final String TELEPORT_KEY_PREFIX = "teleport.";
-	private static final String TREE_KEY_PREFIX = "tree.";
 
 	/**
 	 * Which plugins are on rarely changes and takes a walk over every plugin to find out.
@@ -139,6 +136,9 @@ public class PlugAndPlantPlugin extends Plugin implements PlugAndPlantPanel.List
 	private Banks banks;
 
 	@Inject
+	private PresetStore presetStore;
+
+	@Inject
 	private ShortestPathRouter router;
 
 	@Inject
@@ -162,7 +162,14 @@ public class PlugAndPlantPlugin extends Plugin implements PlugAndPlantPanel.List
 
 	// Run state, only touched on the client thread
 	private boolean runActive;
-	private RunType activeRunType = RunType.HERB;
+	/**
+	 * The preset the run in progress was started with, fixed for the run.
+	 */
+	private RunPreset activePreset = RunPreset.herbRun();
+	/**
+	 * The player's presets, read when an account logs in; empty until then.
+	 */
+	private List<RunPreset> presets = List.of();
 	/**
 	 * The locations the run visits, fixed when it starts: those whose anchor patches needed attention
 	 * then. Each is visited once, so a patch that turns ready later doesn't send the player back.
@@ -233,6 +240,7 @@ public class PlugAndPlantPlugin extends Plugin implements PlugAndPlantPanel.List
 		clientThread.invokeLater(() ->
 		{
 			bankFilter.register();
+			updateItemLists();
 			patchObjects.scan();
 			gardeners.scan();
 			banks.scan();
@@ -298,7 +306,12 @@ public class PlugAndPlantPlugin extends Plugin implements PlugAndPlantPanel.List
 	@Subscribe
 	public void onRuneScapeProfileChanged(RuneScapeProfileChanged event)
 	{
-		clientThread.invoke(this::refresh);
+		clientThread.invoke(() ->
+		{
+			// Presets are per account; the new one's are read on the next refresh
+			presets = List.of();
+			refresh();
+		});
 	}
 
 	@Subscribe
@@ -308,6 +321,11 @@ public class PlugAndPlantPlugin extends Plugin implements PlugAndPlantPanel.List
 		if (PatchTracker.TIME_TRACKING_GROUP.equals(event.getGroup()) || PlugAndPlantConfig.GROUP.equals(event.getGroup()))
 		{
 			clientThread.invoke(this::refresh);
+		}
+		if (PlugAndPlantConfig.GROUP.equals(event.getGroup())
+			&& (PlugAndPlantConfig.ALWAYS_SHOW.equals(event.getKey()) || PlugAndPlantConfig.NEVER_SHOW.equals(event.getKey())))
+		{
+			clientThread.invoke(this::updateItemLists);
 		}
 	}
 
@@ -329,6 +347,18 @@ public class PlugAndPlantPlugin extends Plugin implements PlugAndPlantPanel.List
 		}
 	}
 
+	private void updateItemLists()
+	{
+		bankFilter.setItemLists(ItemList.parse(config.alwaysShow()), ItemList.parse(config.neverShow()));
+	}
+
+	@Override
+	public void setBankItems(String key, String text)
+	{
+		// The config change this posts updates the filter
+		configManager.setConfiguration(PlugAndPlantConfig.GROUP, key, text);
+	}
+
 	@Override
 	public void startRun()
 	{
@@ -339,16 +369,16 @@ public class PlugAndPlantPlugin extends Plugin implements PlugAndPlantPanel.List
 				return;
 			}
 
-			RunType runType = config.runType();
-			Set<FarmLocation> stops = stopsFor(runType, patchTracker.readStates(Instant.now().getEpochSecond()),
-				locationSettings(runType), farmingLevel());
+			RunPreset preset = selectedPreset();
+			Set<FarmLocation> stops = stopsFor(preset, patchTracker.readStates(Instant.now().getEpochSecond()),
+				locationSettings(preset), farmingLevel());
 			if (stops.isEmpty())
 			{
 				return;
 			}
 
 			runActive = true;
-			activeRunType = runType;
+			activePreset = preset;
 			runStops.clear();
 			runStops.addAll(stops);
 			completedStops.clear();
@@ -404,39 +434,159 @@ public class PlugAndPlantPlugin extends Plugin implements PlugAndPlantPanel.List
 	{
 		clientThread.invoke(() ->
 		{
-			if (configManager.getRSProfileKey() == null)
-			{
-				return;
-			}
-
-			// Saved per account, as accounts differ in what they have unlocked.
-			// The config changes these post trigger the refresh.
-			String prefix = keyPrefix(runType());
-			String name = location.name();
-			configManager.setRSProfileConfiguration(PlugAndPlantConfig.GROUP, prefix + ENABLED_KEY_PREFIX + name, settings.isEnabled());
-			configManager.setRSProfileConfiguration(PlugAndPlantConfig.GROUP, prefix + TELEPORT_KEY_PREFIX + name, settings.getTeleport().name());
+			// The teleport is the location's whatever the run; whether to stop there is the preset's
+			presetStore.setTeleport(location, settings.getTeleport());
+			changePreset(preset -> preset.withLocationEnabled(location, settings.isEnabled()));
 		});
 	}
 
 	@Override
 	public void setRunOption(RunOption option, boolean on)
 	{
-		// The config change this posts triggers the refresh
-		configManager.setConfiguration(PlugAndPlantConfig.GROUP, option.getConfigKey(), on);
+		clientThread.invoke(() -> changePreset(preset -> option.set(preset, on)));
 	}
 
 	@Override
-	public void setRunType(RunType runType)
+	public void setPatchRole(PatchType type, PatchRole role)
 	{
-		configManager.setConfiguration(PlugAndPlantConfig.GROUP, PlugAndPlantConfig.RUN_TYPE, runType);
+		clientThread.invoke(() -> changePreset(preset -> preset.withRole(type, role)));
+	}
+
+	@Override
+	public void setPatchExcluded(FarmLocation location, PatchType type, boolean excluded)
+	{
+		clientThread.invoke(() -> changePreset(preset -> preset.withExcluded(location, type, excluded)));
+	}
+
+	@Override
+	public void selectPreset(String id)
+	{
+		clientThread.invoke(() ->
+		{
+			if (!runActive && presets.stream().anyMatch(preset -> preset.getId().equals(id)))
+			{
+				presetStore.select(id);
+				refresh();
+			}
+		});
+	}
+
+	@Override
+	public void newPreset()
+	{
+		clientThread.invoke(() ->
+		{
+			if (runActive || presets.isEmpty())
+			{
+				return;
+			}
+			// A copy of the one shown, to change from there
+			RunPreset copy = selectedPreset().withId("custom-" + System.currentTimeMillis()).withName(uniqueName("New run"));
+			List<RunPreset> changed = new ArrayList<>(presets);
+			changed.add(copy);
+			savePresets(changed);
+			presetStore.select(copy.getId());
+			refresh();
+		});
+	}
+
+	@Override
+	public void renamePreset(String name)
+	{
+		String trimmed = name.trim();
+		if (!trimmed.isEmpty())
+		{
+			clientThread.invoke(() -> changePreset(preset -> preset.withName(trimmed)));
+		}
+	}
+
+	@Override
+	public void deletePreset()
+	{
+		clientThread.invoke(() ->
+		{
+			if (runActive || presets.size() < 2)
+			{
+				return;
+			}
+			RunPreset doomed = selectedPreset();
+			List<RunPreset> changed = new ArrayList<>(presets);
+			changed.removeIf(preset -> preset.getId().equals(doomed.getId()));
+			savePresets(changed);
+			presetStore.select(changed.get(0).getId());
+			refresh();
+		});
 	}
 
 	/**
-	 * The kind of run in progress, or the one the player has picked.
+	 * Changes the preset shown, saves it, and shows the change. Must be called on the client thread.
 	 */
-	private RunType runType()
+	private void changePreset(java.util.function.UnaryOperator<RunPreset> change)
 	{
-		return runActive ? activeRunType : config.runType();
+		if (runActive || presets.isEmpty())
+		{
+			return;
+		}
+		RunPreset selected = selectedPreset();
+		List<RunPreset> changed = new ArrayList<>();
+		for (RunPreset preset : presets)
+		{
+			changed.add(preset.getId().equals(selected.getId()) ? change.apply(preset) : preset);
+		}
+		savePresets(changed);
+		refresh();
+	}
+
+	private void savePresets(List<RunPreset> changed)
+	{
+		presets = List.copyOf(changed);
+		presetStore.save(presets);
+	}
+
+	private String uniqueName(String base)
+	{
+		String name = base;
+		for (int n = 2; presets.stream().anyMatch(preset -> preset.getName().equalsIgnoreCase(base)) && n < 100; n++)
+		{
+			String candidate = base + " " + n;
+			if (presets.stream().noneMatch(preset -> preset.getName().equalsIgnoreCase(candidate)))
+			{
+				return candidate;
+			}
+		}
+		return name;
+	}
+
+	/**
+	 * The preset the side panel shows and a run would start with.
+	 */
+	private RunPreset selectedPreset()
+	{
+		if (presets.isEmpty() && configManager.getRSProfileKey() != null)
+		{
+			presets = List.copyOf(presetStore.load());
+		}
+		if (presets.isEmpty())
+		{
+			return RunPreset.herbRun();
+		}
+		String id = presetStore.selectedId();
+		for (RunPreset preset : presets)
+		{
+			if (preset.getId().equals(id))
+			{
+				return preset;
+			}
+		}
+		return presets.get(0);
+	}
+
+	/**
+	 * The preset of the run in progress, or the one the player has picked.
+	 */
+	private RunPreset preset()
+	{
+		return runActive ? activePreset : selectedPreset();
 	}
 
 	/**
@@ -444,13 +594,13 @@ public class PlugAndPlantPlugin extends Plugin implements PlugAndPlantPanel.List
 	 */
 	private void refresh()
 	{
-		RunType runType = runType();
+		RunPreset preset = preset();
 		boolean loggedIn = client.getGameState() == GameState.LOGGED_IN;
 		long now = Instant.now().getEpochSecond();
 		Map<FarmPatch, PatchState> patches = patchTracker.readStates(now);
 		Set<FarmPatch> composted = patchTracker.readComposted();
 		Set<FarmPatch> protectedTrees = patchTracker.readProtected();
-		Map<FarmLocation, LocationSettings> settings = locationSettings(runType);
+		Map<FarmLocation, LocationSettings> settings = locationSettings(preset);
 		Carried carried = carried();
 		WorldPoint playerPoint = loggedIn && client.getLocalPlayer() != null ? Positions.of(client, client.getLocalPlayer()) : null;
 		FarmingContract contract = loggedIn ? contract() : null;
@@ -459,28 +609,26 @@ public class PlugAndPlantPlugin extends Plugin implements PlugAndPlantPanel.List
 		updateJustPlanted(patches, playerPoint);
 
 		// The checklist goes by what the player wants; the steps by what they can do with what they carry
-		RunPlan.Options wantedOptions = new RunPlan.Options(runType, config.allotments(), config.flowers(),
-			config.compostStep(), config.protectTrees(), farmingLevel);
+		RunPlan.Options wantedOptions = new RunPlan.Options(preset, preset.isCompost(), preset.isProtect(), farmingLevel);
 		boolean carryingCompost = carried.has(ItemID.BOTTOMLESS_COMPOST_BUCKET_FILLED) || carried.hasAny(RunItems.COMPOST_BUCKETS);
-		RunPlan.Options options = new RunPlan.Options(runType, config.allotments(), config.flowers(),
-			config.compostStep() && carryingCompost, config.protectTrees(), farmingLevel);
+		RunPlan.Options options = new RunPlan.Options(preset, preset.isCompost() && carryingCompost, preset.isProtect(), farmingLevel);
 
 		if (runActive && playerPoint != null)
 		{
-			joinStopAt(runType, patches, settings, playerPoint, farmingLevel);
+			joinStopAt(preset, patches, settings, playerPoint, farmingLevel);
 		}
-		List<FarmLocation> stops = orderedStops(runType, runActive ? remainingStops() : stopsFor(runType, patches, settings, farmingLevel), playerPoint);
+		List<FarmLocation> stops = orderedStops(preset, runActive ? remainingStops() : stopsFor(preset, patches, settings, farmingLevel), playerPoint);
 		RunPlan plan = RunPlan.of(stops, patches, composted, protectedTrees, justPlanted, options, carried, contract);
-		if (runActive && playerPoint != null && updateCompletedStops(runType, plan, playerPoint, farmingLevel))
+		if (runActive && playerPoint != null && updateCompletedStops(preset, plan, playerPoint, farmingLevel))
 		{
-			stops = orderedStops(runType, remainingStops(), playerPoint);
+			stops = orderedStops(preset, remainingStops(), playerPoint);
 			plan = RunPlan.of(stops, patches, composted, protectedTrees, justPlanted, options, carried, contract);
 		}
 		RunPlan wanted = options.equals(wantedOptions)
 			? plan
 			: RunPlan.of(stops, patches, composted, protectedTrees, justPlanted, wantedOptions, carried, contract);
 
-		bankFilter.setSpec(bankFilterSpec(runType, settings, stops, contract));
+		bankFilter.setSpec(bankFilterSpec(preset, settings, stops, contract));
 
 		// Patch data is per account and unavailable between worlds, so only judge the run while logged in
 		if (runActive && loggedIn)
@@ -489,7 +637,7 @@ public class PlugAndPlantPlugin extends Plugin implements PlugAndPlantPanel.List
 			{
 				endRun();
 				client.addChatMessage(ChatMessageType.GAMEMESSAGE, "",
-					Character.toUpperCase(runType.getNoun().charAt(0)) + runType.getNoun().substring(1) + " complete.", null);
+					preset.getName() + " complete.", null);
 			}
 			else if (playerPoint != null && stops.get(0).isNear(playerPoint, 0) && plan.hasSteps(stops.get(0)))
 			{
@@ -503,7 +651,7 @@ public class PlugAndPlantPlugin extends Plugin implements PlugAndPlantPanel.List
 			}
 			else
 			{
-				Route wantedRoute = route(runType, stops, plan, settings, carried);
+				Route wantedRoute = route(preset, stops, plan, settings, carried);
 				if (!wantedRoute.equals(route))
 				{
 					router.show(wantedRoute);
@@ -513,27 +661,32 @@ public class PlugAndPlantPlugin extends Plugin implements PlugAndPlantPanel.List
 		}
 
 		List<ChecklistItem> checklist = List.copyOf(Checklist.build(wanted, patches, settings, carried,
-			new Checklist.Options(runType, config.allotments(), config.flowers(), config.compostStep(), config.protectTrees(),
-				config.volcanicAsh(), config.graceful() ? gracefulPieces : List.of()),
+			new Checklist.Options(preset, preset.isCompost(), preset.isProtect(), preset.isVolcanicAsh(),
+				preset.isGraceful() ? gracefulPieces : List.of()),
 			contract));
 
 		updateHighlights(plan, patches, contract);
 		itemHighlightOverlay.setItems(itemHighlights(plan, patches, playerPoint));
-		checklistOverlay.setContent(overlayContent(runType, loggedIn, plan, patches, stops, checklist, playerPoint, options, contract));
+		checklistOverlay.setContent(overlayContent(preset, loggedIn, plan, patches, stops, checklist, playerPoint, options, contract));
 
 		Set<RunOption> runOptions = EnumSet.noneOf(RunOption.class);
 		for (RunOption option : RunOption.values())
 		{
-			if (option.isOn(config))
+			if (option.isOn(preset))
 			{
 				runOptions.add(option);
 			}
 		}
 
-		List<StopView> stopViews = stopViews(runType, stops, plan, patches, settings, playerPoint, options, contract);
-		PanelState state = new PanelState(loggedIn, runActive, runType, patches, settings, new LinkedHashSet<>(stops), stopViews, checklist,
+		List<StopView> stopViews = stopViews(preset, stops, plan, patches, settings, playerPoint, options, contract);
+		List<PanelState.PresetChoice> presetChoices = new ArrayList<>();
+		for (RunPreset each : presets)
+		{
+			presetChoices.add(new PanelState.PresetChoice(each.getId(), each.getName()));
+		}
+		PanelState state = new PanelState(loggedIn, runActive, preset, presetChoices, patches, settings, new LinkedHashSet<>(stops), stopViews, checklist,
 			runOptions, contract == null ? null : contract.seedLabel() + " at the Farming Guild", farmingLevel, now / 60,
-			timeTrackingActive, shortestPathActive, bankTagsActive);
+			timeTrackingActive, shortestPathActive, bankTagsActive, config.alwaysShow(), config.neverShow());
 		if (!state.equals(lastPanelState))
 		{
 			lastPanelState = state;
@@ -557,17 +710,17 @@ public class PlugAndPlantPlugin extends Plugin implements PlugAndPlantPanel.List
 	/**
 	 * The enabled locations whose anchor patches need attention, which are the stops a run would make.
 	 */
-	private static Set<FarmLocation> stopsFor(RunType runType, Map<FarmPatch, PatchState> patches,
+	private static Set<FarmLocation> stopsFor(RunPreset preset, Map<FarmPatch, PatchState> patches,
 		Map<FarmLocation, LocationSettings> settings, int farmingLevel)
 	{
 		Set<FarmLocation> stops = EnumSet.noneOf(FarmLocation.class);
-		for (FarmLocation location : FarmLocation.of(runType))
+		for (FarmLocation location : preset.locations())
 		{
 			if (!settings.get(location).isEnabled())
 			{
 				continue;
 			}
-			for (FarmPatch anchor : location.anchors(runType, farmingLevel))
+			for (FarmPatch anchor : preset.anchors(location, farmingLevel))
 			{
 				if (patches.getOrDefault(anchor, PatchState.UNKNOWN).getStatus().needsVisit())
 				{
@@ -590,10 +743,10 @@ public class PlugAndPlantPlugin extends Plugin implements PlugAndPlantPanel.List
 	 * The stops in the recommended order, but with the one the player is at first, as that is where
 	 * seeds are used first and where the route leads while there is something to do.
 	 */
-	static List<FarmLocation> orderedStops(RunType runType, Collection<FarmLocation> stops, @Nullable WorldPoint playerPoint)
+	static List<FarmLocation> orderedStops(RunPreset preset, Collection<FarmLocation> stops, @Nullable WorldPoint playerPoint)
 	{
 		List<FarmLocation> ordered = new ArrayList<>();
-		for (FarmLocation location : FarmLocation.recommendedOrder(runType))
+		for (FarmLocation location : preset.recommendedOrder())
 		{
 			if (!stops.contains(location))
 			{
@@ -617,7 +770,7 @@ public class PlugAndPlantPlugin extends Plugin implements PlugAndPlantPanel.List
 	 *
 	 * @return whether any stop was completed
 	 */
-	private boolean updateCompletedStops(RunType runType, RunPlan plan, WorldPoint playerPoint, int farmingLevel)
+	private boolean updateCompletedStops(RunPreset preset, RunPlan plan, WorldPoint playerPoint, int farmingLevel)
 	{
 		int tick = client.getTickCount();
 		boolean changed = false;
@@ -643,7 +796,7 @@ public class PlugAndPlantPlugin extends Plugin implements PlugAndPlantPanel.List
 				workedStops.add(location);
 			}
 
-			boolean anchorsDone = location.anchors(runType, farmingLevel).stream().noneMatch(plan.getSteps()::containsKey);
+			boolean anchorsDone = preset.anchors(location, farmingLevel).stream().noneMatch(plan.getSteps()::containsKey);
 			boolean left = reachedStops.contains(location) && !location.isNear(playerPoint, LEAVING_SLACK);
 			// Finishing the last task here moves on at once; a stop that looks done the moment the
 			// player arrives waits a few ticks, as the game can show a patch wrongly for a moment then
@@ -665,16 +818,16 @@ public class PlugAndPlantPlugin extends Plugin implements PlugAndPlantPanel.List
 	 * it isn't one yet. The run's stops are the ones predicted when it started, but a patch can turn
 	 * ready sooner than predicted, and the player knows best where they want to go.
 	 */
-	private void joinStopAt(RunType runType, Map<FarmPatch, PatchState> patches, Map<FarmLocation, LocationSettings> settings,
+	private void joinStopAt(RunPreset preset, Map<FarmPatch, PatchState> patches, Map<FarmLocation, LocationSettings> settings,
 		WorldPoint playerPoint, int farmingLevel)
 	{
-		for (FarmLocation location : FarmLocation.of(runType))
+		for (FarmLocation location : preset.locations())
 		{
 			if (runStops.contains(location) || !settings.get(location).isEnabled() || !location.isNear(playerPoint, 0))
 			{
 				continue;
 			}
-			for (FarmPatch anchor : location.anchors(runType, farmingLevel))
+			for (FarmPatch anchor : preset.anchors(location, farmingLevel))
 			{
 				if (patches.getOrDefault(anchor, PatchState.UNKNOWN).getStatus().needsVisit())
 				{
@@ -728,7 +881,7 @@ public class PlugAndPlantPlugin extends Plugin implements PlugAndPlantPanel.List
 		return FarmingContract.fromVarbit(client.getVarbitValue(VarbitID.FARMGUILD_CONTRACT_TYPE));
 	}
 
-	private Route route(RunType runType, List<FarmLocation> stops, RunPlan plan, Map<FarmLocation, LocationSettings> settings,
+	private Route route(RunPreset preset, List<FarmLocation> stops, RunPlan plan, Map<FarmLocation, LocationSettings> settings,
 		Carried carried)
 	{
 		boolean requireSeeds = config.bankDetourForSeeds() && !carried.hasAny(RunItems.SEED_BOXES);
@@ -736,12 +889,13 @@ public class PlugAndPlantPlugin extends Plugin implements PlugAndPlantPanel.List
 		Map<FarmLocation, List<Map<Integer, Integer>>> routeStops = new LinkedHashMap<>();
 		boolean useHouse = false;
 		boolean useSpells = false;
+		boolean useFairyRings = false;
 		for (FarmLocation location : stops)
 		{
 			// The anchors' seeds are what make the stop worth it; a contract patch needs the contract's
 			List<Map<Integer, Integer>> seeds = new ArrayList<>();
 			Set<PatchType> covered = EnumSet.noneOf(PatchType.class);
-			for (FarmPatch anchor : location.anchors(runType))
+			for (FarmPatch anchor : preset.anchors(location))
 			{
 				if (requireSeeds && plan.getToPlant().contains(anchor) && covered.add(anchor.getType()))
 				{
@@ -754,13 +908,14 @@ public class PlugAndPlantPlugin extends Plugin implements PlugAndPlantPanel.List
 			Teleport choice = settings.get(location).getTeleport();
 			useHouse |= choice.isViaHouse();
 			useSpells |= choice.isSpell();
+			useFairyRings |= choice == Teleport.FAIRY_RING;
 		}
 
 		// Shortest Path looks at the inventory once per search, so the route notes what it would find
 		Set<Integer> routeItems = new HashSet<>();
 		for (int itemId : carried.getItems().keySet())
 		{
-			boolean anchorSeed = runType.getAnchorTypes().stream().anyMatch(type -> type.getSeeds().contains(itemId));
+			boolean anchorSeed = RunPreset.TYPES.stream().anyMatch(type -> preset.role(type) == PatchRole.VISIT && type.getSeeds().contains(itemId));
 			if (Teleport.ALL_ITEM_IDS.contains(itemId) || anchorSeed)
 			{
 				routeItems.add(itemId);
@@ -774,7 +929,7 @@ public class PlugAndPlantPlugin extends Plugin implements PlugAndPlantPanel.List
 			routeStops = Map.of(next.getKey(), next.getValue());
 		}
 
-		return new Route(runType, routeStops, config.carriedTeleportsOnly(), useHouse, useSpells, routeItems);
+		return new Route(preset, routeStops, config.carriedTeleportsOnly(), useHouse, useSpells, useFairyRings, routeItems);
 	}
 
 	/**
@@ -790,28 +945,34 @@ public class PlugAndPlantPlugin extends Plugin implements PlugAndPlantPanel.List
 		return seeds;
 	}
 
-	private BankFilterSpec bankFilterSpec(RunType runType, Map<FarmLocation, LocationSettings> settings,
+	private BankFilterSpec bankFilterSpec(RunPreset preset, Map<FarmLocation, LocationSettings> settings,
 		Collection<FarmLocation> stops, @Nullable FarmingContract contract)
 	{
 		Map<BankSection, List<Integer>> sections = new EnumMap<>(BankSection.class);
 		List<Integer> equipment = new ArrayList<>(RunItems.EQUIPMENT);
-		if (runType == RunType.HERB)
+		if (preset.includes(PatchType.HERB))
 		{
 			sections.put(BankSection.HERB_SEEDS, RunItems.HERB_SEEDS);
-			if (config.allotments())
-			{
-				sections.put(BankSection.ALLOTMENT_SEEDS, RunItems.ALLOTMENT_SEEDS);
-			}
-			if (config.flowers())
-			{
-				sections.put(BankSection.FLOWER_SEEDS, RunItems.FLOWER_SEEDS);
-			}
 		}
-		else
+		if (preset.includes(PatchType.ALLOTMENT))
+		{
+			sections.put(BankSection.ALLOTMENT_SEEDS, RunItems.ALLOTMENT_SEEDS);
+		}
+		if (preset.includes(PatchType.FLOWER))
+		{
+			sections.put(BankSection.FLOWER_SEEDS, RunItems.FLOWER_SEEDS);
+		}
+		if (preset.includes(PatchType.TREE))
 		{
 			sections.put(BankSection.TREE_SAPLINGS, RunItems.TREE_SAPLINGS);
+		}
+		if (preset.includes(PatchType.FRUIT_TREE))
+		{
 			sections.put(BankSection.FRUIT_TREE_SAPLINGS, RunItems.FRUIT_TREE_SAPLINGS);
-			if (config.protectTrees())
+		}
+		if (preset.includesTrees())
+		{
+			if (preset.isProtect())
 			{
 				Set<Integer> payments = new LinkedHashSet<>();
 				for (Sapling sapling : Sapling.values())
@@ -825,7 +986,7 @@ public class PlugAndPlantPlugin extends Plugin implements PlugAndPlantPanel.List
 		}
 
 		// A contract's seed is shown even when the player doesn't grow that kind of crop otherwise
-		if (contract != null && RunType.of(contract.getType()) == runType)
+		if (contract != null && RunPlan.covers(preset, contract.getType()))
 		{
 			BankSection section = contract.getType() == PatchType.ALLOTMENT ? BankSection.ALLOTMENT_SEEDS
 				: contract.getType() == PatchType.FLOWER ? BankSection.FLOWER_SEEDS : null;
@@ -835,11 +996,11 @@ public class PlugAndPlantPlugin extends Plugin implements PlugAndPlantPanel.List
 			}
 		}
 
-		if (config.graceful())
+		if (preset.isGraceful())
 		{
 			gracefulPieces.forEach(equipment::addAll);
 		}
-		if (config.volcanicAsh())
+		if (preset.isVolcanicAsh())
 		{
 			equipment.add(ItemID.FOSSIL_VOLCANIC_ASH);
 		}
@@ -851,9 +1012,10 @@ public class PlugAndPlantPlugin extends Plugin implements PlugAndPlantPanel.List
 			Set<Integer> teleportItems = new LinkedHashSet<>();
 			for (FarmLocation location : stops)
 			{
-				for (Teleport teleport : location.teleportsFor(settings.get(location).getTeleport()))
+				Teleport choice = settings.get(location).getTeleport();
+				for (Teleport teleport : location.teleportsFor(choice))
 				{
-					teleportItems.addAll(teleport.bankItemIds());
+					teleportItems.addAll(location.itemsOnly(choice) ? teleport.getItemIds() : teleport.bankItemIds());
 				}
 			}
 			sections.put(BankSection.TELEPORTS, List.copyOf(teleportItems));
@@ -1032,12 +1194,12 @@ public class PlugAndPlantPlugin extends Plugin implements PlugAndPlantPanel.List
 	/**
 	 * Each patch tended at a stop and what it needs next, with the first thing to do marked.
 	 */
-	private static List<StopView.Task> tasks(RunType runType, FarmLocation location, RunPlan plan,
+	private static List<StopView.Task> tasks(RunPreset preset, FarmLocation location, RunPlan plan,
 		Map<FarmPatch, PatchState> patches, RunPlan.Options options, @Nullable FarmingContract contract)
 	{
-		Set<FarmPatch> contractPatches = contract == null || RunType.of(contract.getType()) != runType
+		Set<FarmPatch> contractPatches = contract == null || !RunPlan.covers(preset, contract.getType())
 			? Set.of()
-			: new HashSet<>(contract.patches(options.includes(contract.getType())));
+			: new HashSet<>(contract.patches(preset.includes(contract.getType())));
 
 		List<StopView.Task> tasks = new ArrayList<>();
 		boolean nextFound = false;
@@ -1071,7 +1233,7 @@ public class PlugAndPlantPlugin extends Plugin implements PlugAndPlantPanel.List
 	 * The run's stops for the side panel, in the order of the run's guide: those finished, the one the
 	 * player is at or headed to, and those still to come.
 	 */
-	private List<StopView> stopViews(RunType runType, List<FarmLocation> stops, RunPlan plan, Map<FarmPatch, PatchState> patches,
+	private List<StopView> stopViews(RunPreset preset, List<FarmLocation> stops, RunPlan plan, Map<FarmPatch, PatchState> patches,
 		Map<FarmLocation, LocationSettings> settings, @Nullable WorldPoint playerPoint, RunPlan.Options options,
 		@Nullable FarmingContract contract)
 	{
@@ -1082,7 +1244,7 @@ public class PlugAndPlantPlugin extends Plugin implements PlugAndPlantPanel.List
 
 		FarmLocation current = currentStop(stops, playerPoint);
 		List<StopView> views = new ArrayList<>();
-		for (FarmLocation location : FarmLocation.recommendedOrder(runType))
+		for (FarmLocation location : preset.recommendedOrder())
 		{
 			if (!runStops.contains(location))
 			{
@@ -1095,7 +1257,7 @@ public class PlugAndPlantPlugin extends Plugin implements PlugAndPlantPanel.List
 			Teleport teleport = settings.get(location).getTeleport();
 			String teleportLabel = teleport == Teleport.ANY || teleport == Teleport.NONE ? null : teleport.getLabel();
 			views.add(new StopView(location, stage,
-				stage == StopView.Stage.CURRENT ? tasks(runType, location, plan, patches, options, contract) : List.of(),
+				stage == StopView.Stage.CURRENT ? tasks(preset, location, plan, patches, options, contract) : List.of(),
 				tasksLeft, teleportLabel));
 		}
 		return views;
@@ -1129,7 +1291,7 @@ public class PlugAndPlantPlugin extends Plugin implements PlugAndPlantPanel.List
 	}
 
 	@Nullable
-	private ChecklistOverlay.Content overlayContent(RunType runType, boolean loggedIn, RunPlan plan, Map<FarmPatch, PatchState> patches,
+	private ChecklistOverlay.Content overlayContent(RunPreset preset, boolean loggedIn, RunPlan plan, Map<FarmPatch, PatchState> patches,
 		List<FarmLocation> stops, List<ChecklistItem> checklist, @Nullable WorldPoint playerPoint, RunPlan.Options options,
 		@Nullable FarmingContract contract)
 	{
@@ -1152,7 +1314,7 @@ public class PlugAndPlantPlugin extends Plugin implements PlugAndPlantPanel.List
 			}
 
 			atStop = true;
-			for (StopView.Task task : tasks(runType, location, plan, patches, options, contract))
+			for (StopView.Task task : tasks(preset, location, plan, patches, options, contract))
 			{
 				steps.add(new ChecklistOverlay.Line(task.getPatch(), task.getLabel(), task.getColor()));
 			}
@@ -1162,13 +1324,13 @@ public class PlugAndPlantPlugin extends Plugin implements PlugAndPlantPanel.List
 		if (!atStop && playerPoint != null)
 		{
 			long now = Instant.now().getEpochSecond();
-			for (FarmLocation location : FarmLocation.of(runType))
+			for (FarmLocation location : preset.locations())
 			{
 				if (!location.isNear(playerPoint, 0))
 				{
 					continue;
 				}
-				for (FarmPatch patch : location.anchors(runType))
+				for (FarmPatch patch : preset.anchors(location))
 				{
 					steps.add(new ChecklistOverlay.Line(shortName(patch), describe(patches.getOrDefault(patch, PatchState.UNKNOWN), now),
 						ColorScheme.LIGHT_GRAY_COLOR));
@@ -1188,8 +1350,7 @@ public class PlugAndPlantPlugin extends Plugin implements PlugAndPlantPanel.List
 		}
 
 		int left = stops.size();
-		String noun = Character.toUpperCase(runType.getNoun().charAt(0)) + runType.getNoun().substring(1);
-		String title = runActive ? noun + ": " + left + (left == 1 ? " stop left" : " stops left") : noun;
+		String title = runActive ? preset.getName() + ": " + left + (left == 1 ? " stop left" : " stops left") : preset.getName();
 		return new ChecklistOverlay.Content(title, steps, lines);
 	}
 
@@ -1297,51 +1458,17 @@ public class PlugAndPlantPlugin extends Plugin implements PlugAndPlantPanel.List
 		bankFilter.close();
 	}
 
-	private static String keyPrefix(RunType runType)
+	/**
+	 * Whether the preset stops at each location, and the teleport the player picked for it.
+	 */
+	private Map<FarmLocation, LocationSettings> locationSettings(RunPreset preset)
 	{
-		// Herb runs came first, so their keys have no prefix
-		return runType == RunType.TREE ? TREE_KEY_PREFIX : "";
-	}
-
-	private Map<FarmLocation, LocationSettings> locationSettings(RunType runType)
-	{
-		String prefix = keyPrefix(runType);
 		Map<FarmLocation, LocationSettings> settings = new EnumMap<>(FarmLocation.class);
 		for (FarmLocation location : FarmLocation.values())
 		{
-			settings.put(location, new LocationSettings(
-				// On unless the player has unticked it
-				!"false".equals(savedChoice(prefix + ENABLED_KEY_PREFIX + location.name())),
-				savedTeleport(location, prefix)));
+			settings.put(location, new LocationSettings(preset.isEnabled(location), presetStore.teleport(location)));
 		}
 		return settings;
-	}
-
-	private Teleport savedTeleport(FarmLocation location, String prefix)
-	{
-		String saved = savedChoice(prefix + TELEPORT_KEY_PREFIX + location.name());
-		if (saved != null)
-		{
-			try
-			{
-				Teleport teleport = Teleport.valueOf(saved);
-				if (location.teleportChoices().contains(teleport))
-				{
-					return teleport;
-				}
-			}
-			catch (IllegalArgumentException e)
-			{
-				// A teleport this version no longer knows; fall back to any
-			}
-		}
-		return Teleport.ANY;
-	}
-
-	@Nullable
-	private String savedChoice(String key)
-	{
-		return configManager.getRSProfileConfiguration(PlugAndPlantConfig.GROUP, key);
 	}
 
 	/**

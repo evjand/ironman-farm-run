@@ -105,7 +105,7 @@ class ShortestPathRouter
 		int nearestDistance = Integer.MAX_VALUE;
 		for (FarmLocation location : route.getStops().keySet())
 		{
-			WorldPoint point = location.pointFor(route.getRunType());
+			WorldPoint point = route.getPreset().pointFor(location);
 			int distance = point.getPlane() == target.getPlane() ? point.distanceTo2D(target) : Integer.MAX_VALUE;
 			if (distance < nearestDistance)
 			{
@@ -136,7 +136,7 @@ class ShortestPathRouter
 		List<Object> targets = new ArrayList<>();
 		for (Map.Entry<FarmLocation, List<Map<Integer, Integer>>> stop : route.getStops().entrySet())
 		{
-			WorldPoint point = stop.getKey().pointFor(route.getRunType());
+			WorldPoint point = route.getPreset().pointFor(stop.getKey());
 			if (stop.getValue().isEmpty())
 			{
 				targets.add(point);
@@ -167,6 +167,10 @@ class ShortestPathRouter
 		if (route.isUseSpells())
 		{
 			settings.put("useTeleportationSpells", true);
+		}
+		if (route.isUseFairyRings())
+		{
+			settings.put("useFairyRings", true);
 		}
 		if (!settings.isEmpty())
 		{

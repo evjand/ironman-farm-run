@@ -6,6 +6,7 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.function.Supplier;
 import javax.annotation.Nullable;
 import javax.inject.Inject;
 import javax.inject.Singleton;
@@ -86,6 +87,11 @@ class BankFilter
 
 	private BankFilterSpec spec = BankFilterSpec.EMPTY;
 	/**
+	 * What the player has listed to always show, and to never show, whatever the run needs.
+	 */
+	private ItemList alwaysShown = ItemList.EMPTY;
+	private ItemList neverShown = ItemList.EMPTY;
+	/**
 	 * Canonical item id to bank slot, worked out once per bank visit so items stay put as they are
 	 * withdrawn; null until the filter is first shown on this visit.
 	 */
@@ -155,6 +161,23 @@ class BankFilter
 	void setSpec(BankFilterSpec spec)
 	{
 		this.spec = spec;
+	}
+
+	/**
+	 * Takes the player's own lists, and shows the filter afresh if it is open so the change is seen.
+	 */
+	void setItemLists(ItemList alwaysShown, ItemList neverShown)
+	{
+		if (alwaysShown.equals(this.alwaysShown) && neverShown.equals(this.neverShown))
+		{
+			return;
+		}
+		this.alwaysShown = alwaysShown;
+		this.neverShown = neverShown;
+		if (isOpen())
+		{
+			open();
+		}
 	}
 
 	boolean isAvailable()
@@ -282,7 +305,16 @@ class BankFilter
 			shown.add(itemManager.canonicalize(widget.getItemId()));
 		}
 
-		BankFilterSpec.Arrangement arrangement = spec.arrange(shown);
+		// The items shown only because the player listed them get a section of their own
+		List<Integer> listed = new ArrayList<>();
+		for (int itemId : shown)
+		{
+			if (spec.sectionOf(itemId) == null)
+			{
+				listed.add(itemId);
+			}
+		}
+		BankFilterSpec.Arrangement arrangement = spec.with(BankSection.ALWAYS_SHOWN, listed).arrange(shown);
 		Map<Integer, Integer> arranged = new HashMap<>();
 		int[] layout = arrangement.getSlots();
 		for (int slot = 0; slot < layout.length; slot++)
@@ -359,7 +391,26 @@ class BankFilter
 
 	private boolean shows(int itemId)
 	{
-		return spec.sectionOf(itemManager.canonicalize(itemId)) != null;
+		return sectionOf(itemManager.canonicalize(itemId)) != null;
+	}
+
+	/**
+	 * The section an item goes in: the run's, unless the player has hidden it, or their own list's.
+	 */
+	@Nullable
+	private BankSection sectionOf(int itemId)
+	{
+		Supplier<String> name = () -> itemManager.getItemComposition(itemId).getName();
+		if (neverShown.contains(itemId, name))
+		{
+			return null;
+		}
+		BankSection section = spec.sectionOf(itemId);
+		if (section == null && alwaysShown.contains(itemId, name))
+		{
+			return BankSection.ALWAYS_SHOWN;
+		}
+		return section;
 	}
 
 	private void createButton()

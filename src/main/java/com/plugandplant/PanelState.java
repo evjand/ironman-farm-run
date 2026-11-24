@@ -16,12 +16,29 @@ class PanelState
 	boolean loggedIn;
 	boolean runActive;
 	/**
-	 * The kind of run shown: the one in progress, or the one the player has picked.
+	 * A preset to pick in the side panel.
 	 */
-	RunType runType;
+	@Value
+	static class PresetChoice
+	{
+		String id;
+		String name;
+
+		@Override
+		public String toString()
+		{
+			return name;
+		}
+	}
+
+	/**
+	 * The preset shown: the one of the run in progress, or the one the player has picked.
+	 */
+	RunPreset preset;
+	List<PresetChoice> presets;
 	Map<FarmPatch, PatchState> patches;
 	/**
-	 * The player's choices per location, for the run type shown.
+	 * Whether the preset stops at each location, and the teleport picked for it.
 	 */
 	Map<FarmLocation, LocationSettings> settings;
 	/**
@@ -53,4 +70,9 @@ class PanelState
 	boolean timeTrackingActive;
 	boolean shortestPathActive;
 	boolean bankTagsActive;
+	/**
+	 * The player's own bank filter lists, as written.
+	 */
+	String alwaysShow;
+	String neverShow;
 }

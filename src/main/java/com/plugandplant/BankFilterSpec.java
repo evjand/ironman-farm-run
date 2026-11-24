@@ -59,6 +59,17 @@ class BankFilterSpec
 	}
 
 	/**
+	 * This spec with a section's items replaced.
+	 */
+	BankFilterSpec with(BankSection section, List<Integer> items)
+	{
+		Map<BankSection, List<Integer>> changed = new EnumMap<>(BankSection.class);
+		changed.putAll(sections);
+		changed.put(section, List.copyOf(items));
+		return new BankFilterSpec(changed);
+	}
+
+	/**
 	 * Lays the given items out section by section, each under an empty row for its heading.
 	 *
 	 * @param bankItemIds canonical ids of the items in the bank

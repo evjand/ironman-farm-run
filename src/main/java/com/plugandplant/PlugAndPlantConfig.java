@@ -50,6 +50,7 @@ public interface PlugAndPlantConfig extends Config
 	}
 
 	// What a run includes; hidden here as it is set in the side panel, right before a run
+	// Settings from before run presets, read once to make the first presets
 	String COMPOST_STEP = "compostStep";
 	String ALLOTMENTS = "allotments";
 	String FLOWERS = "flowers";
@@ -60,6 +61,8 @@ public interface PlugAndPlantConfig extends Config
 	 * The kind of run the side panel shows.
 	 */
 	String RUN_TYPE = "runType";
+	String ALWAYS_SHOW = "alwaysShow";
+	String NEVER_SHOW = "neverShow";
 
 	@ConfigSection(
 		name = "Overlays",
@@ -81,90 +84,6 @@ public interface PlugAndPlantConfig extends Config
 		position = 3
 	)
 	String routingSection = "routing";
-
-	@ConfigItem(
-		keyName = COMPOST_STEP,
-		name = "Compost patches",
-		description = "Include composting as a step at each patch, while you carry compost",
-		position = 1,
-		hidden = true
-	)
-	default boolean compostStep()
-	{
-		return true;
-	}
-
-	@ConfigItem(
-		keyName = ALLOTMENTS,
-		name = "Allotments",
-		description = "Tend the allotments at each stop, for as long as you carry the seeds to replant them (three of a kind per patch)",
-		position = 2,
-		hidden = true
-	)
-	default boolean allotments()
-	{
-		return false;
-	}
-
-	@ConfigItem(
-		keyName = FLOWERS,
-		name = "Flowers",
-		description = "Tend the flower patch at each stop, for as long as you carry flower seeds",
-		position = 3,
-		hidden = true
-	)
-	default boolean flowers()
-	{
-		return false;
-	}
-
-	@ConfigItem(
-		keyName = PROTECT_TREES,
-		name = "Pay gardeners",
-		description = "Pay each gardener to protect the tree you plant",
-		position = 4,
-		hidden = true
-	)
-	default boolean protectTrees()
-	{
-		return true;
-	}
-
-	@ConfigItem(
-		keyName = RUN_TYPE,
-		name = "Run type",
-		description = "The kind of run the side panel shows",
-		position = 7,
-		hidden = true
-	)
-	default RunType runType()
-	{
-		return RunType.HERB;
-	}
-
-	@ConfigItem(
-		keyName = GRACEFUL,
-		name = "Graceful",
-		description = "Add the graceful outfit to the checklist and the bank filter",
-		position = 4,
-		hidden = true
-	)
-	default boolean graceful()
-	{
-		return false;
-	}
-
-	@ConfigItem(
-		keyName = VOLCANIC_ASH,
-		name = "Volcanic ash",
-		description = "Add volcanic ash to the checklist and the bank filter",
-		position = 5,
-		hidden = true
-	)
-	default boolean volcanicAsh()
-	{
-		return false;
-	}
 
 	@ConfigItem(
 		keyName = "highlightPatches",
@@ -224,6 +143,34 @@ public interface PlugAndPlantConfig extends Config
 	default boolean filterBank()
 	{
 		return true;
+	}
+
+	@ConfigItem(
+		keyName = ALWAYS_SHOW,
+		hidden = true,
+		name = "Always show",
+		description = "Items to always show in the bank filter, by name or item ID, separated by commas or new lines."
+			+ " Names ignore case, and * matches any text, so \"Ring of dueling*\" covers every charge.",
+		position = 3,
+		section = bankSection
+	)
+	default String alwaysShow()
+	{
+		return "";
+	}
+
+	@ConfigItem(
+		keyName = NEVER_SHOW,
+		hidden = true,
+		name = "Never show",
+		description = "Items to leave out of the bank filter even when a run needs them, written the same way as"
+			+ " Always show.",
+		position = 4,
+		section = bankSection
+	)
+	default String neverShow()
+	{
+		return "";
 	}
 
 	@ConfigItem(

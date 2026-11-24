@@ -96,9 +96,21 @@ class Carried
 	 */
 	boolean has(Teleport teleport)
 	{
-		if (!teleport.isSpell())
+		return has(teleport, false);
+	}
+
+	/**
+	 * @param itemsOnly whether only the teleport's items count, not runes to cast it
+	 */
+	boolean has(Teleport teleport, boolean itemsOnly)
+	{
+		if (hasAny(teleport.getItemIds()))
 		{
-			return hasAny(teleport.getItemIds());
+			return true;
+		}
+		if (itemsOnly || !teleport.isSpell())
+		{
+			return false;
 		}
 
 		for (Map.Entry<Integer, Integer> rune : teleport.getRunes().entrySet())

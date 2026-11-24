@@ -15,7 +15,7 @@ class Route
 	/**
 	 * Which point of each location the route leads to.
 	 */
-	RunType runType;
+	RunPreset preset;
 	/**
 	 * The locations left to visit, each with the seeds the player needs on arrival. Each map is "any
 	 * one of these item ids, at least that many", and every map in the list is needed. An empty list
@@ -35,6 +35,10 @@ class Route
 	 * Let the route use teleport spells, because the player picked one for a stop.
 	 */
 	boolean useSpells;
+	/**
+	 * Let the route use fairy rings, because the player picked one for a stop.
+	 */
+	boolean useFairyRings;
 	/**
 	 * What Shortest Path would find on the player that bears on the route. It only looks once per
 	 * search, so a change here means asking again.

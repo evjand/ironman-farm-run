@@ -3,21 +3,30 @@ package com.plugandplant;
 import java.awt.BorderLayout;
 import java.awt.Color;
 import java.awt.Component;
+import java.awt.Cursor;
+import java.awt.FlowLayout;
 import java.awt.GridLayout;
+import java.awt.event.FocusAdapter;
+import java.awt.event.FocusEvent;
+import java.awt.event.MouseAdapter;
+import java.awt.event.MouseEvent;
 import java.util.ArrayList;
 import java.util.EnumMap;
+import java.util.EnumSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import javax.annotation.Nullable;
 import javax.swing.BoxLayout;
-import javax.swing.ButtonGroup;
 import javax.swing.JButton;
 import javax.swing.JCheckBox;
 import javax.swing.JComboBox;
 import javax.swing.JComponent;
 import javax.swing.JLabel;
+import javax.swing.JOptionPane;
 import javax.swing.JPanel;
-import javax.swing.JToggleButton;
+import javax.swing.JScrollPane;
+import javax.swing.JTextArea;
 import javax.swing.border.CompoundBorder;
 import javax.swing.border.EmptyBorder;
 import javax.swing.border.MatteBorder;
@@ -39,16 +48,40 @@ class PlugAndPlantPanel extends PluginPanel
 
 		void setRunOption(RunOption option, boolean on);
 
-		void setRunType(RunType runType);
+		void setPatchRole(PatchType type, PatchRole role);
+
+		void setPatchExcluded(FarmLocation location, PatchType type, boolean excluded);
+
+		void selectPreset(String id);
+
+		/**
+		 * Adds a copy of the preset shown, and shows it.
+		 */
+		void newPreset();
+
+		void renamePreset(String name);
+
+		void deletePreset();
 
 		void skipStop(FarmLocation location);
+
+		/**
+		 * @param key {@link PlugAndPlantConfig#ALWAYS_SHOW} or {@link PlugAndPlantConfig#NEVER_SHOW}
+		 */
+		void setBankItems(String key, String text);
 	}
+
+	private static final int HELP_WIDTH = 150;
+	private static final String BANK_ITEMS_HELP = "One name or item ID per line. * matches anything, like Ring of dueling*.";
 
 	private static final Color GOOD = ColorScheme.PROGRESS_COMPLETE_COLOR;
 	private static final Color WARN = ColorScheme.PROGRESS_INPROGRESS_COLOR;
 	private static final Color BAD = ColorScheme.PROGRESS_ERROR_COLOR;
 	private static final Color NEUTRAL = ColorScheme.LIGHT_GRAY_COLOR;
 	private static final Color FAINT = ColorScheme.MEDIUM_GRAY_COLOR;
+
+	private static final Map<PatchType, String> TYPE_NAMES = Map.of(PatchType.HERB, "Herbs", PatchType.FLOWER, "Flowers",
+		PatchType.ALLOTMENT, "Allotments", PatchType.TREE, "Trees", PatchType.FRUIT_TREE, "Fruit trees");
 
 	/**
 	 * The controls for one location.
@@ -59,6 +92,12 @@ class PlugAndPlantPanel extends PluginPanel
 		private final JCheckBox enabled;
 		private final JLabel status = new JLabel();
 		private final JComboBox<Teleport> teleport;
+		/**
+		 * A switch for each kind of patch the preset covers here, when there is more than one.
+		 */
+		private final JPanel types = new JPanel(new GridLayout(0, 2, 4, 0));
+		private final Map<PatchType, JCheckBox> typeBoxes = new EnumMap<>(PatchType.class);
+		private List<PatchType> shownTypes = List.of();
 
 		private LocationRow(FarmLocation location, JPanel block)
 		{
@@ -78,19 +117,28 @@ class PlugAndPlantPanel extends PluginPanel
 	private final JLabel contract = new JLabel();
 	private final Map<FarmLocation, LocationRow> rows = new EnumMap<>(FarmLocation.class);
 	private final Map<RunOption, JCheckBox> runOptions = new EnumMap<>(RunOption.class);
-	private final Map<RunType, JToggleButton> runTypes = new EnumMap<>(RunType.class);
+	private final Map<PatchType, JComboBox<PatchRole>> roles = new EnumMap<>(PatchType.class);
+	private final JComboBox<PanelState.PresetChoice> presetBox = new JComboBox<>();
+	private final JButton deletePreset = linkButton("Delete");
 	private final JPanel checklist = new JPanel(new GridLayout(0, 1, 0, 2));
 	private final JButton startStop = new JButton();
-	private final JButton reroute = new JButton("Show path again");
+	private final JButton reroute = new JButton("Show path");
+	private final JPanel buttons = new JPanel(new GridLayout(1, 0, 4, 0));
+	/**
+	 * The run options that apply to the preset shown; rebuilt when they change, as a grid keeps room for hidden ones.
+	 */
+	private final JPanel options = card();
+	private final JTextArea alwaysShow = new JTextArea(4, 0);
+	private final JTextArea neverShow = new JTextArea(4, 0);
 
 	/**
-	 * Holds the location blocks of the run type shown, in its recommended order.
+	 * Holds the location blocks of the preset shown, in its recommended order.
 	 */
 	private final JPanel locations = new JPanel();
 	/**
-	 * What is set up before a run: the kind of run, its options and the locations. Hidden during a run.
+	 * Picking and managing presets, before a run.
 	 */
-	private final JPanel types = new JPanel(new GridLayout(1, 0, 4, 0));
+	private final JPanel presetBar = new JPanel();
 	private final JPanel setup = new JPanel();
 	/**
 	 * The stops of the run in progress. Shown only during a run.
@@ -98,8 +146,9 @@ class PlugAndPlantPanel extends PluginPanel
 	private final JPanel run = new JPanel();
 	private final JPanel stopList = new JPanel();
 	private final Listener listener;
-	@Nullable
-	private RunType shownRunType;
+	private List<FarmLocation> shownLocations = List.of();
+	private Set<RunOption> shownOptions = Set.of();
+	private List<PanelState.PresetChoice> shownPresets = List.of();
 	private boolean runActive;
 	/**
 	 * Set while {@link #update} is changing checkboxes and dropdowns, so those changes aren't reported as the player's.
@@ -118,40 +167,67 @@ class PlugAndPlantPanel extends PluginPanel
 		JLabel title = new JLabel("Plug & Plant Farming");
 		title.setFont(FontManager.getRunescapeBoldFont());
 		title.setForeground(Color.WHITE);
+		title.setBorder(new EmptyBorder(0, 0, 8, 0));
 		content.add(leftAligned(title));
 
-		types.setBorder(new EmptyBorder(6, 0, 0, 0));
-		ButtonGroup typeGroup = new ButtonGroup();
-		for (RunType type : RunType.values())
+		presetBar.setLayout(new BoxLayout(presetBar, BoxLayout.Y_AXIS));
+		presetBox.setToolTipText("The run to plan. Each keeps its own patches, locations and options.");
+		presetBox.addActionListener(e ->
 		{
-			JToggleButton button = new JToggleButton(type.getLabel());
-			button.setToolTipText("Plan a " + type.getNoun());
-			button.addActionListener(e ->
+			PanelState.PresetChoice choice = (PanelState.PresetChoice) presetBox.getSelectedItem();
+			if (!updating && choice != null)
 			{
-				if (!updating)
-				{
-					listener.setRunType(type);
-				}
-			});
-			typeGroup.add(button);
-			runTypes.put(type, button);
-			types.add(button);
-		}
-		content.add(leftAligned(types));
+				listener.selectPreset(choice.getId());
+			}
+		});
+		presetBar.add(leftAligned(presetBox));
+
+		JButton newPreset = linkButton("New");
+		newPreset.setToolTipText("Make a new run, starting as a copy of this one");
+		newPreset.addActionListener(e -> listener.newPreset());
+		JButton renamePreset = linkButton("Rename");
+		renamePreset.addActionListener(e ->
+		{
+			PanelState.PresetChoice choice = (PanelState.PresetChoice) presetBox.getSelectedItem();
+			String name = (String) JOptionPane.showInputDialog(this, "Name this run:", "Rename run", JOptionPane.PLAIN_MESSAGE,
+				null, null, choice == null ? "" : choice.getName());
+			if (name != null)
+			{
+				listener.renamePreset(name);
+			}
+		});
+		deletePreset.addActionListener(e ->
+		{
+			PanelState.PresetChoice choice = (PanelState.PresetChoice) presetBox.getSelectedItem();
+			if (choice != null && JOptionPane.showConfirmDialog(this, "Delete " + choice.getName() + "?", "Delete run",
+				JOptionPane.OK_CANCEL_OPTION) == JOptionPane.OK_OPTION)
+			{
+				listener.deletePreset();
+			}
+		});
+		JPanel presetActions = new JPanel(new FlowLayout(FlowLayout.RIGHT, 10, 0));
+		presetActions.setBorder(new EmptyBorder(4, 0, 0, 0));
+		presetActions.add(newPreset);
+		presetActions.add(renamePreset);
+		presetActions.add(deletePreset);
+		presetBar.add(leftAligned(presetActions));
+		content.add(leftAligned(presetBar));
 
 		warnings.setForeground(WARN);
-		warnings.setBorder(new EmptyBorder(6, 0, 0, 0));
+		warnings.setFont(FontManager.getRunescapeSmallFont());
+		warnings.setBorder(new EmptyBorder(8, 0, 0, 0));
 		content.add(leftAligned(warnings));
 
 		summary.setForeground(NEUTRAL);
-		summary.setBorder(new EmptyBorder(6, 0, 6, 0));
+		summary.setBorder(new EmptyBorder(8, 0, 0, 0));
 		content.add(leftAligned(summary));
 
 		contract.setForeground(NEUTRAL);
-		contract.setBorder(new EmptyBorder(0, 0, 6, 0));
+		contract.setFont(FontManager.getRunescapeSmallFont());
+		contract.setBorder(new EmptyBorder(2, 0, 0, 0));
 		content.add(leftAligned(contract));
 
-		JPanel buttons = new JPanel(new GridLayout(0, 1, 0, 4));
+		buttons.setBorder(new EmptyBorder(8, 0, 0, 0));
 		startStop.addActionListener(e ->
 		{
 			if (runActive)
@@ -163,10 +239,9 @@ class PlugAndPlantPanel extends PluginPanel
 				listener.startRun();
 			}
 		});
-		reroute.setToolTipText("Ask Shortest Path for the route to the nearest remaining location");
+		reroute.setToolTipText("Ask Shortest Path for the route to the nearest remaining location again");
 		reroute.addActionListener(e -> listener.reroute());
 		buttons.add(startStop);
-		buttons.add(reroute);
 		content.add(leftAligned(buttons));
 
 		run.setLayout(new BoxLayout(run, BoxLayout.Y_AXIS));
@@ -177,9 +252,33 @@ class PlugAndPlantPanel extends PluginPanel
 
 		setup.setLayout(new BoxLayout(setup, BoxLayout.Y_AXIS));
 		content.add(leftAligned(setup));
+		setup.add(leftAligned(sectionTitle("Patches")));
+		JPanel typesCard = card();
+		typesCard.setLayout(new GridLayout(0, 1, 0, 2));
+		for (PatchType type : RunPreset.TYPES)
+		{
+			JComboBox<PatchRole> role = new JComboBox<>(PatchRole.values());
+			role.setFont(FontManager.getRunescapeSmallFont());
+			role.setToolTipText("<html>Visit for: a location is a stop when this needs attention.<br>"
+				+ "Tend while there: done at the stops the run makes anyway, while your seeds last.</html>");
+			role.addActionListener(e ->
+			{
+				if (!updating)
+				{
+					listener.setPatchRole(type, (PatchRole) role.getSelectedItem());
+				}
+			});
+			roles.put(type, role);
+			JPanel line = new JPanel(new BorderLayout(6, 0));
+			line.setBackground(ColorScheme.DARKER_GRAY_COLOR);
+			line.add(name(TYPE_NAMES.get(type)), BorderLayout.CENTER);
+			line.add(role, BorderLayout.EAST);
+			typesCard.add(line);
+		}
+		setup.add(leftAligned(typesCard));
+
 		setup.add(leftAligned(sectionTitle("Run options")));
-		JPanel options = section();
-		options.setLayout(new GridLayout(0, 2, 4, 2));
+		options.setLayout(new GridLayout(0, 1, 0, 2));
 		for (RunOption option : RunOption.values())
 		{
 			JCheckBox box = new JCheckBox(option.getLabel());
@@ -193,7 +292,6 @@ class PlugAndPlantPanel extends PluginPanel
 				}
 			});
 			runOptions.put(option, box);
-			options.add(box);
 		}
 		setup.add(leftAligned(options));
 
@@ -202,7 +300,8 @@ class PlugAndPlantPanel extends PluginPanel
 		setup.add(leftAligned(locations));
 		for (FarmLocation location : FarmLocation.values())
 		{
-			JPanel block = section();
+			JPanel block = card();
+			block.setLayout(new BoxLayout(block, BoxLayout.Y_AXIS));
 			LocationRow row = new LocationRow(location, block);
 			Runnable changed = () ->
 			{
@@ -215,23 +314,79 @@ class PlugAndPlantPanel extends PluginPanel
 			row.enabled.setBackground(ColorScheme.DARKER_GRAY_COLOR);
 			row.enabled.setToolTipText("Stop at " + location.getDisplayName() + " on runs");
 			row.enabled.addActionListener(e -> changed.run());
-			block.add(row(row.enabled, row.status));
+			row.status.setFont(FontManager.getRunescapeSmallFont());
+			block.add(leftAligned(row(row.enabled, row.status)));
 
+			// A quiet second line: the teleport is set once and rarely changed
 			row.teleport.setToolTipText("What to bring to get to " + location.getDisplayName()
 				+ ". The checklist and bank filter show it, and the route uses it if you carry it.");
+			row.teleport.setFont(FontManager.getRunescapeSmallFont());
+			row.teleport.setForeground(NEUTRAL);
+			row.teleport.setBackground(ColorScheme.DARKER_GRAY_COLOR);
+			row.teleport.setBorder(new EmptyBorder(0, 0, 0, 0));
 			row.teleport.addActionListener(e -> changed.run());
-			block.add(indented(row.teleport));
+			block.add(leftAligned(indented(row.teleport)));
 
-			// Space below each location, inside the block so it hides with it
-			block.setBorder(new CompoundBorder(new MatteBorder(0, 0, 4, 0, ColorScheme.DARK_GRAY_COLOR), block.getBorder()));
+			row.types.setBackground(ColorScheme.DARKER_GRAY_COLOR);
+			row.types.setBorder(new EmptyBorder(2, 24, 0, 0));
+			for (PatchType type : RunPreset.TYPES)
+			{
+				JCheckBox box = new JCheckBox(TYPE_NAMES.get(type));
+				box.setFont(FontManager.getRunescapeSmallFont());
+				box.setBackground(ColorScheme.DARKER_GRAY_COLOR);
+				box.setToolTipText("Untick to leave " + TYPE_NAMES.get(type).toLowerCase() + " at " + location.getDisplayName()
+					+ " out of this run");
+				box.addActionListener(e ->
+				{
+					if (!updating)
+					{
+						listener.setPatchExcluded(location, type, !box.isSelected());
+					}
+				});
+				row.typeBoxes.put(type, box);
+			}
+			block.add(leftAligned(row.types));
+
 			rows.put(location, row);
 			leftAligned(block);
 		}
 
 		content.add(leftAligned(sectionTitle("Checklist")));
 		checklist.setBackground(ColorScheme.DARKER_GRAY_COLOR);
-		checklist.setBorder(new EmptyBorder(6, 6, 6, 6));
+		checklist.setBorder(new EmptyBorder(6, 8, 6, 8));
 		content.add(leftAligned(checklist));
+
+		// Out of the way until wanted: a heading that opens the player's own bank filter lists
+		JPanel bankItems = new JPanel();
+		bankItems.setLayout(new BoxLayout(bankItems, BoxLayout.Y_AXIS));
+		bankItems.setBackground(ColorScheme.DARKER_GRAY_COLOR);
+		bankItems.setBorder(new EmptyBorder(6, 8, 8, 8));
+		bankItems.setVisible(false);
+		// A width for the text to wrap at, as a label otherwise keeps to one line
+		JLabel help = new JLabel("<html><body style='width:" + HELP_WIDTH + "px'>" + BANK_ITEMS_HELP + "</body></html>");
+		help.setForeground(FAINT);
+		bankItems.add(leftAligned(help));
+		bankItems.add(leftAligned(itemListLabel("Always show")));
+		bankItems.add(leftAligned(itemList(alwaysShow, PlugAndPlantConfig.ALWAYS_SHOW)));
+		bankItems.add(leftAligned(itemListLabel("Never show")));
+		bankItems.add(leftAligned(itemList(neverShow, PlugAndPlantConfig.NEVER_SHOW)));
+
+		JLabel bankItemsTitle = sectionTitle("Bank filter items \u25B8");
+		bankItemsTitle.setToolTipText("Add items to the bank filter, or leave them out");
+		bankItemsTitle.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
+		bankItemsTitle.addMouseListener(new MouseAdapter()
+		{
+			@Override
+			public void mouseClicked(MouseEvent e)
+			{
+				bankItems.setVisible(!bankItems.isVisible());
+				bankItemsTitle.setText("Bank filter items " + (bankItems.isVisible() ? "\u25BE" : "\u25B8"));
+				revalidate();
+				repaint();
+			}
+		});
+		content.add(leftAligned(bankItemsTitle));
+		content.add(leftAligned(bankItems));
 
 		add(content, BorderLayout.NORTH);
 	}
@@ -243,7 +398,7 @@ class PlugAndPlantPanel extends PluginPanel
 	{
 		runActive = state.isRunActive();
 		int stops = state.getTargets().size();
-		RunType runType = state.getRunType();
+		RunPreset preset = state.getPreset();
 
 		warnings.setText(warningText(state));
 		warnings.setVisible(!warnings.getText().isEmpty());
@@ -255,11 +410,11 @@ class PlugAndPlantPanel extends PluginPanel
 		else if (runActive)
 		{
 			long done = state.getRunStops().stream().filter(stop -> stop.getStage() == StopView.Stage.DONE).count();
-			summary.setText(capitalised(runType.getNoun()) + ": " + done + " of " + state.getRunStops().size() + " stops done");
+			summary.setText(preset.getName() + ": " + done + " of " + state.getRunStops().size() + " stops done");
 		}
 		else if (stops == 0)
 		{
-			summary.setText("No stops need attention for a " + runType.getNoun() + ".");
+			summary.setText("No stops need attention for the " + preset.noun() + ".");
 		}
 		else
 		{
@@ -270,7 +425,7 @@ class PlugAndPlantPanel extends PluginPanel
 		contract.setVisible(state.getContract() != null);
 
 		// Setting up is for before a run; during one the panel follows its stops
-		types.setVisible(!runActive);
+		presetBar.setVisible(!runActive);
 		setup.setVisible(!runActive);
 		run.setVisible(runActive);
 		if (runActive)
@@ -278,41 +433,86 @@ class PlugAndPlantPanel extends PluginPanel
 			showStops(state.getRunStops());
 		}
 
-		startStop.setText(runActive ? "Stop " + runType.getNoun() : "Start " + runType.getNoun());
 		// A run follows the patches through Time Tracking, so it can't get anywhere without it
 		startStop.setEnabled(runActive || (state.isLoggedIn() && stops > 0 && state.isTimeTrackingActive()));
-		reroute.setVisible(runActive && state.isShortestPathActive());
-
-		if (runType != shownRunType)
+		// Side by side during a run; GridLayout keeps room for hidden buttons, so they're taken out instead
+		boolean showReroute = runActive && state.isShortestPathActive();
+		if (showReroute != (reroute.getParent() == buttons))
 		{
-			// The locations of this kind of run, in the order its guide visits them
-			shownRunType = runType;
-			locations.removeAll();
-			for (FarmLocation location : FarmLocation.recommendedOrder(runType))
+			if (showReroute)
 			{
-				locations.add(rows.get(location).block);
+				buttons.add(reroute);
+			}
+			else
+			{
+				buttons.remove(reroute);
 			}
 		}
+		startStop.setText(runActive ? "Stop run" : "Start " + preset.noun());
 
 		updating = true;
-		for (Map.Entry<RunType, JToggleButton> type : runTypes.entrySet())
+		if (!state.getPresets().equals(shownPresets))
 		{
-			type.getValue().setSelected(type.getKey() == runType);
-			// The run in progress decides what the panel shows
-			type.getValue().setEnabled(!runActive);
+			shownPresets = state.getPresets();
+			presetBox.removeAllItems();
+			for (PanelState.PresetChoice choice : shownPresets)
+			{
+				presetBox.addItem(choice);
+			}
+		}
+		for (PanelState.PresetChoice choice : shownPresets)
+		{
+			if (choice.getId().equals(preset.getId()))
+			{
+				presetBox.setSelectedItem(choice);
+			}
+		}
+		presetBox.setEnabled(!runActive && !shownPresets.isEmpty());
+		deletePreset.setEnabled(shownPresets.size() > 1);
+
+		for (Map.Entry<PatchType, JComboBox<PatchRole>> role : roles.entrySet())
+		{
+			role.getValue().setSelectedItem(preset.role(role.getKey()));
+			role.getValue().setEnabled(state.isLoggedIn());
+		}
+
+		Set<RunOption> applicable = EnumSet.noneOf(RunOption.class);
+		for (RunOption option : RunOption.values())
+		{
+			if (option.appliesTo(preset))
+			{
+				applicable.add(option);
+			}
+		}
+		if (!applicable.equals(shownOptions))
+		{
+			shownOptions = applicable;
+			options.removeAll();
+			for (RunOption option : applicable)
+			{
+				options.add(runOptions.get(option));
+			}
 		}
 		for (Map.Entry<RunOption, JCheckBox> option : runOptions.entrySet())
 		{
 			option.getValue().setSelected(state.getRunOptions().contains(option.getKey()));
-			option.getValue().setVisible(option.getKey().getRunTypes().contains(runType));
+			option.getValue().setEnabled(state.isLoggedIn());
 		}
-		for (FarmLocation location : FarmLocation.values())
+
+		// The locations with something the preset covers, in the order it visits them
+		List<FarmLocation> presetLocations = preset.locations();
+		if (!presetLocations.equals(shownLocations))
+		{
+			shownLocations = presetLocations;
+			locations.removeAll();
+			for (FarmLocation location : presetLocations)
+			{
+				locations.add(rows.get(location).block);
+			}
+		}
+		for (FarmLocation location : presetLocations)
 		{
 			LocationRow row = rows.get(location);
-			if (!location.has(runType))
-			{
-				continue;
-			}
 			LocationSettings settings = state.getSettings().getOrDefault(location, LocationSettings.DEFAULT);
 
 			row.enabled.setSelected(settings.isEnabled());
@@ -320,14 +520,32 @@ class PlugAndPlantPanel extends PluginPanel
 			row.teleport.setSelectedItem(settings.getTeleport());
 			row.teleport.setEnabled(state.isLoggedIn());
 
+			List<PatchType> types = preset.typesAt(location);
+			if (!types.equals(row.shownTypes))
+			{
+				row.shownTypes = types;
+				row.types.removeAll();
+				for (PatchType type : types)
+				{
+					row.types.add(row.typeBoxes.get(type));
+				}
+				row.types.setVisible(types.size() > 1);
+			}
+			for (PatchType type : types)
+			{
+				JCheckBox box = row.typeBoxes.get(type);
+				box.setSelected(!preset.isExcluded(location, type));
+				box.setEnabled(state.isLoggedIn() && settings.isEnabled());
+			}
+
 			// The anchor patches decide whether a location is a stop; the tooltip has the rest
-			PatchState shown = anchorState(location, runType, state);
+			PatchState shown = anchorState(location, preset, state);
 			row.status.setText(statusText(shown, state.getNowMinutes()));
 			row.status.setForeground(statusColor(shown.getStatus()));
 			List<String> lines = new ArrayList<>();
 			for (FarmPatch patch : location.getPatches())
 			{
-				if (RunType.of(patch.getType()) != runType)
+				if (!preset.includes(patch.getType()))
 				{
 					continue;
 				}
@@ -361,6 +579,7 @@ class PlugAndPlantPanel extends PluginPanel
 		{
 			JLabel heading = new JLabel("Packed");
 			heading.setForeground(FAINT);
+			heading.setFont(FontManager.getRunescapeSmallFont());
 			heading.setBorder(new EmptyBorder(6, 0, 0, 0));
 			checklist.add(heading);
 			for (ChecklistItem item : packed)
@@ -373,8 +592,46 @@ class PlugAndPlantPanel extends PluginPanel
 			}
 		}
 
+		// Not while the player is typing in it
+		if (!alwaysShow.hasFocus() && !alwaysShow.getText().equals(state.getAlwaysShow()))
+		{
+			alwaysShow.setText(state.getAlwaysShow());
+		}
+		if (!neverShow.hasFocus() && !neverShow.getText().equals(state.getNeverShow()))
+		{
+			neverShow.setText(state.getNeverShow());
+		}
+
 		revalidate();
 		repaint();
+	}
+
+	private static JLabel itemListLabel(String text)
+	{
+		JLabel label = name(text);
+		label.setBorder(new EmptyBorder(8, 0, 2, 0));
+		return label;
+	}
+
+	/**
+	 * A box for one of the player's item lists, saved when they leave it.
+	 */
+	private JScrollPane itemList(JTextArea area, String key)
+	{
+		area.setLineWrap(true);
+		area.setWrapStyleWord(true);
+		area.setBorder(new EmptyBorder(4, 4, 4, 4));
+		area.addFocusListener(new FocusAdapter()
+		{
+			@Override
+			public void focusLost(FocusEvent e)
+			{
+				listener.setBankItems(key, area.getText());
+			}
+		});
+		JScrollPane scroll = new JScrollPane(area, JScrollPane.VERTICAL_SCROLLBAR_AS_NEEDED, JScrollPane.HORIZONTAL_SCROLLBAR_NEVER);
+		scroll.setBorder(new MatteBorder(1, 1, 1, 1, ColorScheme.MEDIUM_GRAY_COLOR));
+		return scroll;
 	}
 
 	/**
@@ -410,11 +667,12 @@ class PlugAndPlantPanel extends PluginPanel
 		block.setBackground(ColorScheme.DARKER_GRAY_HOVER_COLOR);
 		block.setBorder(new CompoundBorder(
 			new CompoundBorder(new MatteBorder(4, 0, 4, 0, ColorScheme.DARK_GRAY_COLOR), new MatteBorder(0, 3, 0, 0, ColorScheme.BRAND_ORANGE)),
-			new EmptyBorder(4, 6, 4, 6)));
+			new EmptyBorder(5, 8, 5, 8)));
 
 		JLabel title = label(view.getLocation().getDisplayName(), Color.WHITE);
 		title.setFont(FontManager.getRunescapeBoldFont());
 		JLabel teleport = label(view.getTeleport() == null ? "" : view.getTeleport(), NEUTRAL);
+		teleport.setFont(FontManager.getRunescapeSmallFont());
 		teleport.setToolTipText("The teleport you picked for this stop");
 		block.add(line(title, teleport, ColorScheme.DARKER_GRAY_HOVER_COLOR));
 
@@ -430,17 +688,42 @@ class PlugAndPlantPanel extends PluginPanel
 			block.add(line(patch, step, ColorScheme.DARKER_GRAY_HOVER_COLOR));
 		}
 
+		// A quiet way out, for a stop that can't be finished
 		JButton skip = new JButton("Skip stop");
+		skip.setFont(FontManager.getRunescapeSmallFont());
+		skip.setForeground(NEUTRAL);
+		skip.setContentAreaFilled(false);
+		skip.setBorderPainted(false);
+		skip.setFocusPainted(false);
+		skip.setBorder(new EmptyBorder(0, 0, 0, 0));
+		skip.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
 		skip.setToolTipText("Leave " + view.getLocation().getDisplayName() + " out of the rest of this run, for when it can't be finished");
 		skip.addActionListener(e -> listener.skipStop(view.getLocation()));
-		block.add(skip);
+		skip.addMouseListener(new MouseAdapter()
+		{
+			@Override
+			public void mouseEntered(MouseEvent e)
+			{
+				skip.setForeground(Color.WHITE);
+			}
+
+			@Override
+			public void mouseExited(MouseEvent e)
+			{
+				skip.setForeground(NEUTRAL);
+			}
+		});
+		JPanel skipLine = new JPanel(new BorderLayout());
+		skipLine.setBackground(ColorScheme.DARKER_GRAY_HOVER_COLOR);
+		skipLine.add(skip, BorderLayout.EAST);
+		block.add(skipLine);
 		return block;
 	}
 
 	private static JPanel compactLine(JLabel left, JLabel right)
 	{
 		JPanel line = line(left, right, ColorScheme.DARKER_GRAY_COLOR);
-		line.setBorder(new CompoundBorder(new MatteBorder(0, 0, 1, 0, ColorScheme.DARK_GRAY_COLOR), new EmptyBorder(3, 9, 3, 6)));
+		line.setBorder(new CompoundBorder(new MatteBorder(0, 0, 1, 0, ColorScheme.DARK_GRAY_COLOR), new EmptyBorder(4, 11, 4, 8)));
 		return line;
 	}
 
@@ -464,10 +747,10 @@ class PlugAndPlantPanel extends PluginPanel
 	 * The state of the location's anchor patch that most needs the player: one with something to do,
 	 * otherwise the one that is ready soonest.
 	 */
-	private static PatchState anchorState(FarmLocation location, RunType runType, PanelState state)
+	private static PatchState anchorState(FarmLocation location, RunPreset preset, PanelState state)
 	{
 		PatchState shown = null;
-		for (FarmPatch patch : location.anchors(runType, state.getFarmingLevel()))
+		for (FarmPatch patch : preset.anchors(location, state.getFarmingLevel()))
 		{
 			PatchState patchState = state.getPatches().getOrDefault(patch, PatchState.UNKNOWN);
 			if (shown == null || rank(patchState) < rank(shown))
@@ -485,11 +768,6 @@ class PlugAndPlantPanel extends PluginPanel
 			return 0;
 		}
 		return state.getStatus() == PatchStatus.GROWING ? state.getReadyAt() : Long.MAX_VALUE;
-	}
-
-	private static String capitalised(String text)
-	{
-		return Character.toUpperCase(text.charAt(0)) + text.substring(1);
 	}
 
 	private static String warningText(PanelState state)
@@ -564,15 +842,18 @@ class PlugAndPlantPanel extends PluginPanel
 		JLabel label = new JLabel(text);
 		label.setFont(FontManager.getRunescapeBoldFont());
 		label.setForeground(Color.WHITE);
-		label.setBorder(new EmptyBorder(12, 0, 4, 0));
+		label.setBorder(new EmptyBorder(14, 0, 6, 0));
 		return label;
 	}
 
-	private static JPanel section()
+	/**
+	 * A dark block with room around its contents, set a little apart from the next one.
+	 */
+	private static JPanel card()
 	{
-		JPanel panel = new JPanel(new GridLayout(0, 1, 0, 2));
+		JPanel panel = new JPanel();
 		panel.setBackground(ColorScheme.DARKER_GRAY_COLOR);
-		panel.setBorder(new EmptyBorder(4, 6, 4, 6));
+		panel.setBorder(new CompoundBorder(new MatteBorder(0, 0, 4, 0, ColorScheme.DARK_GRAY_COLOR), new EmptyBorder(5, 6, 5, 8)));
 		return panel;
 	}
 
@@ -596,9 +877,42 @@ class PlugAndPlantPanel extends PluginPanel
 	{
 		JPanel panel = new JPanel(new BorderLayout());
 		panel.setBackground(ColorScheme.DARKER_GRAY_COLOR);
-		panel.setBorder(new EmptyBorder(0, 20, 0, 0));
+		panel.setBorder(new EmptyBorder(0, 24, 0, 0));
 		panel.add(component, BorderLayout.CENTER);
 		return panel;
+	}
+
+	/**
+	 * A small text button, for actions that shouldn't draw the eye.
+	 */
+	private static JButton linkButton(String text)
+	{
+		JButton button = new JButton(text);
+		button.setFont(FontManager.getRunescapeSmallFont());
+		button.setForeground(NEUTRAL);
+		button.setContentAreaFilled(false);
+		button.setBorderPainted(false);
+		button.setFocusPainted(false);
+		button.setBorder(new EmptyBorder(0, 0, 0, 0));
+		button.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
+		button.addMouseListener(new MouseAdapter()
+		{
+			@Override
+			public void mouseEntered(MouseEvent e)
+			{
+				if (button.isEnabled())
+				{
+					button.setForeground(Color.WHITE);
+				}
+			}
+
+			@Override
+			public void mouseExited(MouseEvent e)
+			{
+				button.setForeground(NEUTRAL);
+			}
+		});
+		return button;
 	}
 
 	/**

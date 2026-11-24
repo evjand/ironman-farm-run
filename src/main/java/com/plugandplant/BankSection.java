@@ -23,6 +23,10 @@ enum BankSection
 	PAYMENTS("Gardener payments"),
 	TELEPORTS("Teleports"),
 	/**
+	 * Items the player has listed to always be shown, which the filter wouldn't show otherwise.
+	 */
+	ALWAYS_SHOWN("Always shown"),
+	/**
 	 * Tree seeds on their way to becoming saplings, and what it takes to grow them.
 	 */
 	GROWING("Saplings to grow");

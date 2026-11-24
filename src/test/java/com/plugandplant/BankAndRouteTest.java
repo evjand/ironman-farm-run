@@ -55,6 +55,32 @@ public class BankAndRouteTest
 	}
 
 	@Test
+	public void wearablesComeFirstAndLeaveTheirOtherSection()
+	{
+		BankFilterSpec spec = spec(
+			BankSection.WEARABLES, List.of(ItemID.ARDY_CAPE_EASY),
+			BankSection.EQUIPMENT, RunItems.EQUIPMENT,
+			BankSection.TELEPORTS, List.of(ItemID.ARDY_CAPE_EASY, ItemID.ECTOPHIAL));
+
+		BankFilterSpec.Arrangement arrangement = spec.arrange(List.of(ItemID.ECTOPHIAL, ItemID.SPADE, ItemID.ARDY_CAPE_EASY));
+
+		assertEquals(BankSection.WEARABLES, spec.sectionOf(ItemID.ARDY_CAPE_EASY));
+		assertEquals(ItemID.ARDY_CAPE_EASY, arrangement.getSlots()[8]);
+		assertEquals(List.of(BankSection.WEARABLES, BankSection.EQUIPMENT, BankSection.TELEPORTS),
+			List.copyOf(arrangement.getHeadingRows().keySet()));
+	}
+
+	@Test
+	public void saplingsToGrowCoverEveryTreeSeedAndItsUnwateredSeedling()
+	{
+		assertEquals(13 * 2 + 3 + 2 + 9, RunItems.SAPLINGS_TO_GROW.size());
+		// Watered seedlings count as saplings, so they're shown with them
+		assertFalse(RunItems.SAPLINGS_TO_GROW.contains(ItemID.PLANTPOT_PINEAPPLE_SEED_WATERED));
+		assertTrue(RunItems.FRUIT_TREE_SAPLINGS.contains(ItemID.PLANTPOT_PINEAPPLE_SEED_WATERED));
+		assertEquals(RunItems.SAPLINGS_TO_GROW.size(), Set.copyOf(RunItems.SAPLINGS_TO_GROW).size());
+	}
+
+	@Test
 	public void bankItemsAreArrangedInSectionsUnderAHeadingRow()
 	{
 		BankFilterSpec spec = spec(
@@ -69,18 +95,18 @@ public class BankAndRouteTest
 
 		int[] expected = new int[8 * 8];
 		Arrays.fill(expected, -1);
-		expected[8] = ItemID.GUAM_SEED;
-		expected[9] = ItemID.TORSTOL_SEED;
-		expected[24] = ItemID.POTATO_SEED;
-		expected[40] = ItemID.SPADE;
-		expected[41] = ItemID.DIBBER;
+		expected[8] = ItemID.SPADE;
+		expected[9] = ItemID.DIBBER;
+		expected[24] = ItemID.GUAM_SEED;
+		expected[25] = ItemID.TORSTOL_SEED;
+		expected[40] = ItemID.POTATO_SEED;
 		expected[56] = ItemID.ECTOPHIAL;
 		assertArrayEquals(expected, arrangement.getSlots());
 
 		Map<BankSection, Integer> headings = new LinkedHashMap<>();
-		headings.put(BankSection.HERB_SEEDS, 0);
-		headings.put(BankSection.ALLOTMENT_SEEDS, 2);
-		headings.put(BankSection.EQUIPMENT, 4);
+		headings.put(BankSection.EQUIPMENT, 0);
+		headings.put(BankSection.HERB_SEEDS, 2);
+		headings.put(BankSection.ALLOTMENT_SEEDS, 4);
 		headings.put(BankSection.TELEPORTS, 6);
 		assertEquals(headings, arrangement.getHeadingRows());
 	}
@@ -88,16 +114,16 @@ public class BankAndRouteTest
 	@Test
 	public void sectionLongerThanARowPushesTheNextOneDown()
 	{
-		BankFilterSpec spec = spec(BankSection.HERB_SEEDS, RunItems.HERB_SEEDS, BankSection.EQUIPMENT, RunItems.EQUIPMENT);
+		BankFilterSpec spec = spec(BankSection.HERB_SEEDS, RunItems.HERB_SEEDS, BankSection.TELEPORTS, List.of(ItemID.ECTOPHIAL));
 		BankFilterSpec.Arrangement arrangement = spec.arrange(
 			List.of(ItemID.GUAM_SEED, ItemID.MARRENTILL_SEED, ItemID.TARROMIN_SEED, ItemID.HARRALANDER_SEED, ItemID.RANARR_SEED,
-				ItemID.TOADFLAX_SEED, ItemID.IRIT_SEED, ItemID.AVANTOE_SEED, ItemID.KWUARM_SEED, ItemID.RAKE));
+				ItemID.TOADFLAX_SEED, ItemID.IRIT_SEED, ItemID.AVANTOE_SEED, ItemID.KWUARM_SEED, ItemID.ECTOPHIAL));
 
 		assertEquals(Integer.valueOf(0), arrangement.getHeadingRows().get(BankSection.HERB_SEEDS));
 		// Nine herb seeds take two rows, after the heading row
-		assertEquals(Integer.valueOf(3), arrangement.getHeadingRows().get(BankSection.EQUIPMENT));
+		assertEquals(Integer.valueOf(3), arrangement.getHeadingRows().get(BankSection.TELEPORTS));
 		assertEquals(ItemID.KWUARM_SEED, arrangement.getSlots()[16]);
-		assertEquals(ItemID.RAKE, arrangement.getSlots()[32]);
+		assertEquals(ItemID.ECTOPHIAL, arrangement.getSlots()[32]);
 	}
 
 	@Test

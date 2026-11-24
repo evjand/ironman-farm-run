@@ -47,12 +47,21 @@ final class RunItems
 		ItemID.WHITE_LILY_SEED
 	);
 
+	/**
+	 * Saplings, then watered seedlings: a watered seedling grows into a sapling in a few minutes, so
+	 * it will almost certainly be one by the time it reaches a patch, and counts as one.
+	 */
 	static final List<Integer> TREE_SAPLINGS = List.of(
 		ItemID.PLANTPOT_OAK_SAPLING,
 		ItemID.PLANTPOT_WILLOW_SAPLING,
 		ItemID.PLANTPOT_MAPLE_SAPLING,
 		ItemID.PLANTPOT_YEW_SAPLING,
-		ItemID.PLANTPOT_MAGIC_TREE_SAPLING
+		ItemID.PLANTPOT_MAGIC_TREE_SAPLING,
+		ItemID.PLANTPOT_ACORN_WATERED,
+		ItemID.PLANTPOT_WILLOW_SEED_WATERED,
+		ItemID.PLANTPOT_MAPLE_SEED_WATERED,
+		ItemID.PLANTPOT_YEW_SEED_WATERED,
+		ItemID.PLANTPOT_MAGIC_TREE_SEED_WATERED
 	);
 
 	static final List<Integer> FRUIT_TREE_SAPLINGS = List.of(
@@ -63,7 +72,15 @@ final class RunItems
 		ItemID.PLANTPOT_PINEAPPLE_SAPLING,
 		ItemID.PLANTPOT_PAPAYA_SAPLING,
 		ItemID.PLANTPOT_PALM_SAPLING,
-		ItemID.PLANTPOT_DRAGONFRUIT_SAPLING
+		ItemID.PLANTPOT_DRAGONFRUIT_SAPLING,
+		ItemID.PLANTPOT_APPLE_SEED_WATERED,
+		ItemID.PLANTPOT_BANANA_SEED_WATERED,
+		ItemID.PLANTPOT_ORANGE_SEED_WATERED,
+		ItemID.PLANTPOT_CURRY_SEED_WATERED,
+		ItemID.PLANTPOT_PINEAPPLE_SEED_WATERED,
+		ItemID.PLANTPOT_PAPAYA_SEED_WATERED,
+		ItemID.PLANTPOT_PALM_SEED_WATERED,
+		ItemID.PLANTPOT_DRAGONFRUIT_SEED_WATERED
 	);
 
 	/**
@@ -112,6 +129,25 @@ final class RunItems
 	);
 
 	/**
+	 * Tree and fruit tree seeds, the seedlings they become in a plant pot until watered, and the pots,
+	 * trowel and watering cans it takes to grow them into saplings. Watered seedlings count as saplings.
+	 */
+	static final List<Integer> SAPLINGS_TO_GROW = List.of(
+		ItemID.ACORN, ItemID.WILLOW_SEED, ItemID.MAPLE_SEED, ItemID.YEW_SEED, ItemID.MAGIC_TREE_SEED,
+		ItemID.APPLE_TREE_SEED, ItemID.BANANA_TREE_SEED, ItemID.ORANGE_TREE_SEED, ItemID.CURRY_TREE_SEED,
+		ItemID.PINEAPPLE_TREE_SEED, ItemID.PAPAYA_TREE_SEED, ItemID.PALM_TREE_SEED, ItemID.DRAGONFRUIT_TREE_SEED,
+		ItemID.PLANTPOT_ACORN, ItemID.PLANTPOT_WILLOW_SEED, ItemID.PLANTPOT_MAPLE_SEED, ItemID.PLANTPOT_YEW_SEED,
+		ItemID.PLANTPOT_MAGIC_TREE_SEED, ItemID.PLANTPOT_APPLE_SEED, ItemID.PLANTPOT_BANANA_SEED,
+		ItemID.PLANTPOT_ORANGE_SEED, ItemID.PLANTPOT_CURRY_SEED, ItemID.PLANTPOT_PINEAPPLE_SEED,
+		ItemID.PLANTPOT_PAPAYA_SEED, ItemID.PLANTPOT_PALM_SEED, ItemID.PLANTPOT_DRAGONFRUIT_SEED,
+		ItemID.PLANTPOT_EMPTY, ItemID.PLANTPOT_COMPOST, ItemID.PLANTPOT_SUPERCOMPOST,
+		ItemID.GARDENING_TROWEL, ItemID.ZEAH_WATERINGCAN,
+		ItemID.WATERING_CAN_8, ItemID.WATERING_CAN_7, ItemID.WATERING_CAN_6, ItemID.WATERING_CAN_5,
+		ItemID.WATERING_CAN_4, ItemID.WATERING_CAN_3, ItemID.WATERING_CAN_2, ItemID.WATERING_CAN_1,
+		ItemID.WATERING_CAN_0
+	);
+
+	/**
 	 * Tools and consumables, always part of the bank filter.
 	 */
 	static final List<Integer> EQUIPMENT = List.of(
@@ -137,4 +173,5 @@ final class RunItems
 	private RunItems()
 	{
 	}
+
 }

@@ -144,7 +144,7 @@ class Banks
 		}
 		if (composition != null && (offersBank(composition.getActions()) || isBankName(composition.getName())))
 		{
-			banks.put(object, object.getWorldLocation());
+			banks.put(object, Positions.of(client, object));
 		}
 	}
 
@@ -153,7 +153,7 @@ class Banks
 		NPCComposition composition = npc.getTransformedComposition();
 		if (composition != null && offersBank(composition.getActions()))
 		{
-			banks.put(npc, npc.getWorldLocation());
+			banks.put(npc, Positions.of(client, npc));
 		}
 	}
 

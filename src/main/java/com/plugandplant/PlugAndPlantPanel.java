@@ -554,8 +554,6 @@ class PlugAndPlantPanel extends PluginPanel
 				return BAD;
 			case STORED:
 				return ChecklistOverlay.STORED_COLOR;
-			case HINT:
-				return ChecklistOverlay.HINT_COLOR;
 			default:
 				return FAINT;
 		}

@@ -250,7 +250,7 @@ final class Checklist
 		Map<Integer, String> names = new LinkedHashMap<>();
 		for (Sapling sapling : Sapling.values())
 		{
-			int saplings = carried.count(sapling.getSapling());
+			int saplings = carried.count(sapling.getSapling()) + carried.count(sapling.getWateredSeedling());
 			if (saplings > 0)
 			{
 				needed.merge(sapling.getPayment(), saplings * sapling.getPaymentAmount(), Integer::sum);

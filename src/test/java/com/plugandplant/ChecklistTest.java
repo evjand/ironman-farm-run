@@ -361,4 +361,16 @@ public class ChecklistTest
 
 		assertEquals(new ChecklistItem("Pay: watermelons", "13 / 40", ChecklistItem.State.MISSING), find(build(TREES), "Pay: watermelons"));
 	}
+
+	@Test
+	public void wateredSeedlingsCountAsSaplings()
+	{
+		// A watered seedling is a sapling by the time it reaches a patch, so it is planted and paid for like one
+		ready(FarmLocation.CATHERBY_ORCHARD.patches(PatchType.FRUIT_TREE).get(0), PatchStatus.CHECK_HEALTH);
+		items.put(ItemID.PLANTPOT_PINEAPPLE_SAPLING, 1);
+		items.put(ItemID.PLANTPOT_PINEAPPLE_SEED_WATERED, 1);
+
+		assertEquals(new ChecklistItem("Pay: watermelons", "0 / 20", ChecklistItem.State.MISSING), find(build(TREES), "Pay: watermelons"));
+		assertEquals(Sapling.PINEAPPLE, Sapling.bySapling(ItemID.PLANTPOT_PINEAPPLE_SEED_WATERED));
+	}
 }

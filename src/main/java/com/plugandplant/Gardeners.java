@@ -122,9 +122,9 @@ class Gardeners
 	}
 
 	@Nullable
-	private static FarmPatch patchOf(NPC npc)
+	private FarmPatch patchOf(NPC npc)
 	{
-		WorldPoint point = npc.getWorldLocation();
+		WorldPoint point = Positions.of(client, npc);
 		FarmPatch nearest = null;
 		for (FarmLocation location : FarmLocation.values())
 		{

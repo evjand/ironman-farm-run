@@ -27,7 +27,8 @@ The side panel says which of these are missing.
   payments, graceful and volcanic ash. An allotment takes three seeds of one kind.
 - **Tree runs.** Trees at Lumbridge, Varrock, Falador, Taverley, the Gnome Stronghold, Auburnvale and the Farming
   Guild, and fruit trees at the Gnome Stronghold, Tree Gnome Village, Catherby, Brimhaven, Lletya, Kastori and the
-  Farming Guild. Each tree goes through checking its health, taking it down (chop it, or pay the gardener 200
+  Farming Guild. A watered seedling counts as a sapling, as it will have grown into one by the time you plant it.
+  Each tree goes through checking its health, taking it down (chop it, or pay the gardener 200
   coins, or carry an axe), digging up the stump, planting any sapling of the right kind, and paying for protection.
   The checklist counts the payment for every sapling you carry, the bank filter shows the payments, and the
   gardener is highlighted from the moment the tree is in. Without the payment on you, the step is skipped and the
@@ -38,13 +39,15 @@ The side panel says which of these are missing.
 - **Checklist.** What to bring for the rest of the run, checked off against what you carry: seeds or saplings,
   payments, compost, tools and teleports. What is left to fetch comes first and what you have is tucked below.
   Tools and compost you keep with the tool leprechaun show as "At leprechaun", so you can pick them up there or take
-  them from the bank. Spell runes count those in a rune pouch, combination runes, and an equipped staff or tome. Run
-  items you could wear in a free slot, such as a teleport cloak or graceful, are suggested to make room. The
+  them from the bank. Spell runes count those in a rune pouch, combination runes, and an equipped staff or tome. The
   checklist is in the side panel, and in a box in the game while you are at a bank; away from one the box keeps to
   the steps at the stop you are at.
-- **Bank filter.** Opening the bank during a run shows only the run's items, in sections: seeds or saplings,
-  gardener payments, equipment and teleports. A button with the Farming icon at the top of the bank turns it on and
-  off at any time.
+- **Wear to make room.** Run items in your inventory that you could wear in a free slot, such as a teleport cloak,
+  graceful or an axe, are outlined in white while you pack for a run and during one.
+- **Bank filter.** Opening the bank during a run shows only the run's items, in sections: everything that can be
+  worn first, so you can take it and put it on before the rest, then equipment, seeds or saplings, gardener
+  payments and teleports. A tree run adds the seeds still on their way to becoming saplings, with plant pots, a
+  trowel and watering cans. A button with the Farming icon at the top of the bank turns it on and off at any time.
 - **Preferred teleports.** Pick what to bring for each location: any teleport item that goes there, one in
   particular, the runes for a teleport spell, a way into your house, or nothing. During a run Shortest Path is
   limited to the teleport items you carry, so the route follows what you brought.

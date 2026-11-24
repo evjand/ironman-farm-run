@@ -10,14 +10,22 @@ import lombok.RequiredArgsConstructor;
 @RequiredArgsConstructor
 enum BankSection
 {
+	/**
+	 * Whatever the run uses that can be worn, first so it can all be taken and put on before the rest.
+	 */
+	WEARABLES("Wear"),
+	EQUIPMENT("Equipment"),
 	HERB_SEEDS("Herb seeds"),
 	ALLOTMENT_SEEDS("Allotment seeds"),
 	FLOWER_SEEDS("Flower seeds"),
 	TREE_SAPLINGS("Tree saplings"),
 	FRUIT_TREE_SAPLINGS("Fruit tree saplings"),
 	PAYMENTS("Gardener payments"),
-	EQUIPMENT("Equipment"),
-	TELEPORTS("Teleports");
+	TELEPORTS("Teleports"),
+	/**
+	 * Tree seeds on their way to becoming saplings, and what it takes to grow them.
+	 */
+	GROWING("Saplings to grow");
 
 	private final String title;
 }

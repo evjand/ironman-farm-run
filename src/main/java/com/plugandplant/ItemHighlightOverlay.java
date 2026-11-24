@@ -13,12 +13,17 @@ import net.runelite.client.ui.overlay.WidgetItemOverlay;
 
 /**
  * Highlights the inventory items the patches the player is at need next, in the colour of the step:
- * seeds when a patch needs planting, compost when it needs compost, and so on.
+ * seeds when a patch needs planting, compost when it needs compost, and so on. Run items that could
+ * be worn in a free slot are highlighted too, to make room.
  */
 @Singleton
 class ItemHighlightOverlay extends WidgetItemOverlay
 {
 	private static final int FILL_ALPHA = 40;
+	/**
+	 * For run items that could be worn in a free slot to make room in the inventory.
+	 */
+	static final Color WEAR_COLOR = Color.WHITE;
 
 	private final ItemManager itemManager;
 	/**

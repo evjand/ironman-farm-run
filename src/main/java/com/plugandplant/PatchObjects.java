@@ -112,7 +112,7 @@ class PatchObjects
 		FarmPatch patch = patchOf(object);
 		if (patch != null)
 		{
-			log.debug("Found {} at {}", patch, object.getWorldLocation());
+			log.debug("Found {} at {}", patch, Positions.of(client, object));
 			objects.put(object, patch);
 		}
 	}
@@ -120,7 +120,7 @@ class PatchObjects
 	@Nullable
 	private FarmPatch patchOf(GameObject object)
 	{
-		WorldPoint point = object.getWorldLocation();
+		WorldPoint point = Positions.of(client, object);
 		for (FarmLocation location : FarmLocation.values())
 		{
 			if (!location.isNear(point, 0))

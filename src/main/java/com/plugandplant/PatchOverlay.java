@@ -116,7 +116,7 @@ class PatchOverlay extends Overlay
 
 		for (TileHighlight highlight : tileHighlights)
 		{
-			LocalPoint local = LocalPoint.fromWorld(client.getTopLevelWorldView(), highlight.getPoint());
+			LocalPoint local = Positions.toScene(client, highlight.getPoint());
 			if (local == null)
 			{
 				continue;

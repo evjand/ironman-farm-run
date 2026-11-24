@@ -452,7 +452,7 @@ public class PlugAndPlantPlugin extends Plugin implements PlugAndPlantPanel.List
 		Set<FarmPatch> protectedTrees = patchTracker.readProtected();
 		Map<FarmLocation, LocationSettings> settings = locationSettings(runType);
 		Carried carried = carried();
-		WorldPoint playerPoint = loggedIn && client.getLocalPlayer() != null ? client.getLocalPlayer().getWorldLocation() : null;
+		WorldPoint playerPoint = loggedIn && client.getLocalPlayer() != null ? Positions.of(client, client.getLocalPlayer()) : null;
 		FarmingContract contract = loggedIn ? contract() : null;
 		int farmingLevel = farmingLevel();
 
@@ -491,6 +491,16 @@ public class PlugAndPlantPlugin extends Plugin implements PlugAndPlantPanel.List
 				client.addChatMessage(ChatMessageType.GAMEMESSAGE, "",
 					Character.toUpperCase(runType.getNoun().charAt(0)) + runType.getNoun().substring(1) + " complete.", null);
 			}
+			else if (playerPoint != null && stops.get(0).isNear(playerPoint, 0) && plan.hasSteps(stops.get(0)))
+			{
+				// At a stop with work left: its patches are highlighted, and a path to where the player already
+				// is can only mislead, such as in Lletya, where Shortest Path would teleport there again
+				if (route != null)
+				{
+					router.clear();
+					route = null;
+				}
+			}
 			else
 			{
 				Route wantedRoute = route(runType, stops, plan, settings, carried);
@@ -502,11 +512,10 @@ public class PlugAndPlantPlugin extends Plugin implements PlugAndPlantPanel.List
 			}
 		}
 
-		List<ChecklistItem> checklist = new ArrayList<>(Checklist.build(wanted, patches, settings, carried,
+		List<ChecklistItem> checklist = List.copyOf(Checklist.build(wanted, patches, settings, carried,
 			new Checklist.Options(runType, config.allotments(), config.flowers(), config.compostStep(), config.protectTrees(),
 				config.volcanicAsh(), config.graceful() ? gracefulPieces : List.of()),
 			contract));
-		checklist.addAll(wearHints());
 
 		updateHighlights(plan, patches, contract);
 		itemHighlightOverlay.setItems(itemHighlights(plan, patches, playerPoint));
@@ -812,6 +821,7 @@ public class PlugAndPlantPlugin extends Plugin implements PlugAndPlantPanel.List
 				sections.put(BankSection.PAYMENTS, List.copyOf(payments));
 			}
 			equipment.addAll(RunItems.TREE_EQUIPMENT);
+			sections.put(BankSection.GROWING, RunItems.SAPLINGS_TO_GROW);
 		}
 
 		// A contract's seed is shown even when the player doesn't grow that kind of crop otherwise
@@ -848,6 +858,20 @@ public class PlugAndPlantPlugin extends Plugin implements PlugAndPlantPanel.List
 			}
 			sections.put(BankSection.TELEPORTS, List.copyOf(teleportItems));
 		}
+
+		// Anything that can be worn goes on top, to be taken and put on first
+		Set<Integer> wearables = new LinkedHashSet<>();
+		for (List<Integer> items : sections.values())
+		{
+			for (int itemId : items)
+			{
+				if (isEquipable(itemId))
+				{
+					wearables.add(itemId);
+				}
+			}
+		}
+		sections.put(BankSection.WEARABLES, List.copyOf(wearables));
 
 		return new BankFilterSpec(sections);
 	}
@@ -910,7 +934,7 @@ public class PlugAndPlantPlugin extends Plugin implements PlugAndPlantPanel.List
 		}
 		// A patch with something to do whose object hasn't been recognised gets a box on its known tile
 		List<PatchOverlay.TileHighlight> tileHighlights = new ArrayList<>();
-		WorldPoint playerPoint = client.getLocalPlayer() == null ? null : client.getLocalPlayer().getWorldLocation();
+		WorldPoint playerPoint = client.getLocalPlayer() == null ? null : Positions.of(client, client.getLocalPlayer());
 		for (Map.Entry<FarmPatch, Step> entry : plan.getSteps().entrySet())
 		{
 			FarmPatch patch = entry.getKey();
@@ -929,12 +953,25 @@ public class PlugAndPlantPlugin extends Plugin implements PlugAndPlantPanel.List
 	 */
 	private Map<Integer, Color> itemHighlights(RunPlan plan, Map<FarmPatch, PatchState> patches, @Nullable WorldPoint playerPoint)
 	{
-		if (!runActive || !config.highlightItems() || playerPoint == null)
+		if (!config.highlightItems() || playerPoint == null)
 		{
 			return Map.of();
 		}
 
 		Map<Integer, Color> items = new HashMap<>();
+		// While packing for a run, or on one: what could be worn to make room
+		if (runActive || bankFilter.isOpen())
+		{
+			for (int itemId : wearable())
+			{
+				items.put(itemId, ItemHighlightOverlay.WEAR_COLOR);
+			}
+		}
+		if (!runActive)
+		{
+			return items;
+		}
+
 		for (Map.Entry<FarmPatch, Step> entry : plan.getSteps().entrySet())
 		{
 			FarmPatch patch = entry.getKey();
@@ -983,9 +1020,10 @@ public class PlugAndPlantPlugin extends Plugin implements PlugAndPlantPanel.List
 					break;
 			}
 
+			// What the stop needs next comes before what could be worn
 			for (int itemId : needed)
 			{
-				items.putIfAbsent(itemId, step.getColor());
+				items.put(itemId, step.getColor());
 			}
 		}
 		return items;
@@ -1138,14 +1176,12 @@ public class PlugAndPlantPlugin extends Plugin implements PlugAndPlantPanel.List
 			}
 		}
 
-		// What to bring is for the bank; elsewhere it would only crowd the steps. Hints are for anywhere.
+		// What to bring is for the bank; elsewhere it would only crowd the steps
 		boolean atBank = playerPoint != null && (banks.isNear(playerPoint) || bankFilter.isBankOpen());
 		List<ChecklistOverlay.Line> lines = new ArrayList<>();
 		for (ChecklistItem item : checklist)
 		{
-			boolean shown = item.getState() == ChecklistItem.State.HINT
-				|| (atBank && (!config.checklistMissingOnly() || item.getState() != ChecklistItem.State.GOOD));
-			if (shown)
+			if (atBank && (!config.checklistMissingOnly() || item.getState() != ChecklistItem.State.GOOD))
 			{
 				lines.add(new ChecklistOverlay.Line(item.getLabel(), item.getValue(), ChecklistOverlay.color(item.getState())));
 			}
@@ -1160,17 +1196,16 @@ public class PlugAndPlantPlugin extends Plugin implements PlugAndPlantPanel.List
 	/**
 	 * Run items in the inventory that could be worn in a free slot instead, to make room.
 	 */
-	private List<ChecklistItem> wearHints()
+	private Set<Integer> wearable()
 	{
 		ItemContainer inventory = client.getItemContainer(InventoryID.INV);
 		if (inventory == null)
 		{
-			return List.of();
+			return Set.of();
 		}
 		ItemContainer worn = client.getItemContainer(InventoryID.WORN);
 
-		List<ChecklistItem> hints = new ArrayList<>();
-		Set<Integer> slotsSuggested = new HashSet<>();
+		Set<Integer> wearable = new HashSet<>();
 		for (Item item : inventory.getItems())
 		{
 			int itemId = item.getId();
@@ -1179,11 +1214,11 @@ public class PlugAndPlantPlugin extends Plugin implements PlugAndPlantPanel.List
 				continue;
 			}
 
-			ItemStats stats = itemManager.getItemStats(itemId);
-			if (stats == null || !stats.isEquipable() || stats.getEquipment() == null)
+			if (!isEquipable(itemId))
 			{
 				continue;
 			}
+			ItemStats stats = itemManager.getItemStats(itemId);
 
 			int slot = stats.getEquipment().getSlot();
 			boolean free = worn == null || worn.getItem(slot) == null;
@@ -1192,21 +1227,26 @@ public class PlugAndPlantPlugin extends Plugin implements PlugAndPlantPanel.List
 			{
 				free = false;
 			}
-			if (free && slotsSuggested.add(slot))
+			if (free)
 			{
-				hints.add(new ChecklistItem("Wear " + itemManager.getItemComposition(itemId).getName(), "Frees a space",
-					ChecklistItem.State.HINT));
+				wearable.add(itemId);
 			}
 		}
-		return hints;
+		return wearable;
+	}
+
+	private boolean isEquipable(int itemId)
+	{
+		ItemStats stats = itemManager.getItemStats(itemId);
+		return stats != null && stats.isEquipable() && stats.getEquipment() != null;
 	}
 
 	/**
-	 * Teleport items, graceful, magic secateurs and staves: the run items worth wearing.
+	 * Teleport items, graceful, magic secateurs, axes and staves: the run items worth wearing.
 	 */
 	private boolean isWearableRunItem(int itemId)
 	{
-		if (Teleport.ALL_ITEM_IDS.contains(itemId) || itemId == ItemID.FAIRY_ENCHANTED_SECATEURS)
+		if (Teleport.ALL_ITEM_IDS.contains(itemId) || itemId == ItemID.FAIRY_ENCHANTED_SECATEURS || RunItems.AXES.contains(itemId))
 		{
 			return true;
 		}

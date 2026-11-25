@@ -50,6 +50,8 @@ class PresetStore
 		boolean protect;
 		boolean graceful;
 		boolean volcanicAsh;
+		boolean noteHerbs;
+		boolean noteAllotmentsAndFlowers;
 	}
 
 	@Inject
@@ -220,6 +222,8 @@ class PresetStore
 		stored.protect = preset.isProtect();
 		stored.graceful = preset.isGraceful();
 		stored.volcanicAsh = preset.isVolcanicAsh();
+		stored.noteHerbs = preset.isNoteHerbs();
+		stored.noteAllotmentsAndFlowers = preset.isNoteAllotmentsAndFlowers();
 		return stored;
 	}
 
@@ -287,7 +291,8 @@ class PresetStore
 
 		return new RunPreset(stored.id == null ? "preset" : stored.id, stored.name == null ? "Run" : stored.name,
 			Collections.unmodifiableMap(roles), Collections.unmodifiableSet(disabled), Collections.unmodifiableMap(excluded),
-			stored.compost, stored.protect, stored.graceful, stored.volcanicAsh);
+			stored.compost, stored.protect, stored.graceful, stored.volcanicAsh, stored.noteHerbs,
+			stored.noteAllotmentsAndFlowers);
 	}
 
 	@Nullable

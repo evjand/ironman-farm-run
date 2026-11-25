@@ -80,9 +80,6 @@ class PlugAndPlantPanel extends PluginPanel
 	private static final Color NEUTRAL = ColorScheme.LIGHT_GRAY_COLOR;
 	private static final Color FAINT = ColorScheme.MEDIUM_GRAY_COLOR;
 
-	private static final Map<PatchType, String> TYPE_NAMES = Map.of(PatchType.HERB, "Herbs", PatchType.FLOWER, "Flowers",
-		PatchType.ALLOTMENT, "Allotments", PatchType.TREE, "Trees", PatchType.FRUIT_TREE, "Fruit trees");
-
 	/**
 	 * The controls for one location.
 	 */
@@ -271,7 +268,7 @@ class PlugAndPlantPanel extends PluginPanel
 			roles.put(type, role);
 			JPanel line = new JPanel(new BorderLayout(6, 0));
 			line.setBackground(ColorScheme.DARKER_GRAY_COLOR);
-			line.add(name(TYPE_NAMES.get(type)), BorderLayout.CENTER);
+			line.add(name(type.getPluralName()), BorderLayout.CENTER);
 			line.add(role, BorderLayout.EAST);
 			typesCard.add(line);
 		}
@@ -331,10 +328,10 @@ class PlugAndPlantPanel extends PluginPanel
 			row.types.setBorder(new EmptyBorder(2, 24, 0, 0));
 			for (PatchType type : RunPreset.TYPES)
 			{
-				JCheckBox box = new JCheckBox(TYPE_NAMES.get(type));
+				JCheckBox box = new JCheckBox(type.getPluralName());
 				box.setFont(FontManager.getRunescapeSmallFont());
 				box.setBackground(ColorScheme.DARKER_GRAY_COLOR);
-				box.setToolTipText("Untick to leave " + TYPE_NAMES.get(type).toLowerCase() + " at " + location.getDisplayName()
+				box.setToolTipText("Untick to leave " + type.getPluralName().toLowerCase() + " at " + location.getDisplayName()
 					+ " out of this run");
 				box.addActionListener(e ->
 				{

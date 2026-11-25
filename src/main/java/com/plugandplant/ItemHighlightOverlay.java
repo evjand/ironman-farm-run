@@ -5,6 +5,7 @@ import java.awt.Graphics2D;
 import java.awt.Rectangle;
 import java.awt.image.BufferedImage;
 import java.util.Map;
+import java.util.Set;
 import javax.inject.Inject;
 import javax.inject.Singleton;
 import net.runelite.api.widgets.WidgetItem;
@@ -30,6 +31,10 @@ class ItemHighlightOverlay extends WidgetItemOverlay
 	 * Canonical item id to highlight colour. Worked out by the plugin whenever the plan changes.
 	 */
 	private Map<Integer, Color> items = Map.of();
+	/**
+	 * Canonical ids among {@link #items} to highlight only when not noted: produce to take to the leprechaun.
+	 */
+	private Set<Integer> unnotedOnly = Set.of();
 
 	@Inject
 	ItemHighlightOverlay(ItemManager itemManager)
@@ -38,17 +43,19 @@ class ItemHighlightOverlay extends WidgetItemOverlay
 		showOnInventory();
 	}
 
-	void setItems(Map<Integer, Color> items)
+	void setItems(Map<Integer, Color> items, Set<Integer> unnotedOnly)
 	{
 		this.items = items;
+		this.unnotedOnly = unnotedOnly;
 	}
 
 	@Override
 	public void renderItemOverlay(Graphics2D graphics, int itemId, WidgetItem widgetItem)
 	{
-		// Payments can be noted
-		Color color = items.get(itemManager.canonicalize(itemId));
-		if (color == null)
+		// Payments can be noted, but produce to note is only highlighted until it is
+		int canonical = itemManager.canonicalize(itemId);
+		Color color = items.get(canonical);
+		if (color == null || (canonical != itemId && unnotedOnly.contains(canonical)))
 		{
 			return;
 		}

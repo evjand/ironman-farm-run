@@ -33,15 +33,27 @@ class Carried
 	 * Whether the player carries a seed box the game hasn't shown the contents of.
 	 */
 	boolean seedBoxUnknown;
+	/**
+	 * Item id to quantity, for the inventory's items that aren't noted. {@link #items} counts noted
+	 * items as the items themselves, so it can't tell.
+	 */
+	Map<Integer, Integer> unnoted;
 
 	Carried(Map<Integer, Integer> items, Map<Integer, Integer> pouchRunes, Set<Integer> unlimitedRunes,
-		Map<Integer, Integer> stored, boolean seedBoxUnknown)
+		Map<Integer, Integer> stored, boolean seedBoxUnknown, Map<Integer, Integer> unnoted)
 	{
 		this.items = items;
 		this.pouchRunes = pouchRunes;
 		this.unlimitedRunes = unlimitedRunes;
 		this.stored = stored;
 		this.seedBoxUnknown = seedBoxUnknown;
+		this.unnoted = unnoted;
+	}
+
+	Carried(Map<Integer, Integer> items, Map<Integer, Integer> pouchRunes, Set<Integer> unlimitedRunes,
+		Map<Integer, Integer> stored, boolean seedBoxUnknown)
+	{
+		this(items, pouchRunes, unlimitedRunes, stored, seedBoxUnknown, Map.of());
 	}
 
 	Carried(Map<Integer, Integer> items, Map<Integer, Integer> pouchRunes)
@@ -72,6 +84,19 @@ class Carried
 	boolean hasAny(Collection<Integer> itemIds)
 	{
 		return count(itemIds) > 0;
+	}
+
+	/**
+	 * How many of the items the inventory holds unnoted.
+	 */
+	int unnoted(Collection<Integer> itemIds)
+	{
+		int total = 0;
+		for (int itemId : itemIds)
+		{
+			total += unnoted.getOrDefault(itemId, 0);
+		}
+		return total;
 	}
 
 	int stored(int itemId)

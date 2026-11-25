@@ -59,11 +59,12 @@ public enum Teleport
 	VARROCK_TELEPORT("Varrock Teleport", items(ItemID.POH_TABLET_VARROCKTELEPORT),
 		runes(ItemID.LAWRUNE, 1, ItemID.AIRRUNE, 3, ItemID.FIRERUNE, 1)),
 
-	// Tablets with no spell of their own: house tablets redirected to a portal, and a clue scroll
+	// Tablets with no spell of their own: house tablets redirected to a portal, and clue scrolls
 	HOSIDIUS_TAB("Hosidius teleport", ItemID.NZONE_TELETAB_KOUREND),
 	TAVERLEY_TAB("Taverley teleport", ItemID.NZONE_TELETAB_TAVERLEY),
 	BRIMHAVEN_TAB("Brimhaven teleport", ItemID.NZONE_TELETAB_BRIMHAVEN),
 	MOS_LEHARMLESS_TELEPORT("Mos le'harmless teleport", ItemID.TELEPORTSCROLL_MOSLES),
+	TAI_BWO_WANNAI_TELEPORT("Tai bwo wannai teleport", ItemID.TELEPORTSCROLL_TAIBWO),
 
 	// Items
 	EXPLORERS_RING("Explorer's ring", ItemID.LUMBRIDGE_RING_MEDIUM, ItemID.LUMBRIDGE_RING_HARD, ItemID.LUMBRIDGE_RING_ELITE),
@@ -111,6 +112,8 @@ public enum Teleport
 	STONY_BASALT("Stony basalt", ItemID.STRONGHOLD_TELEPORT_BASALT),
 	ICY_BASALT("Icy basalt", ItemID.WEISS_TELEPORT_BASALT),
 	RING_OF_SHADOWS("Ring of shadows", ItemID.RING_OF_SHADOWS),
+	DIGSITE_PENDANT("Digsite pendant", ItemID.NECKLACE_OF_DIGSITE_1, ItemID.NECKLACE_OF_DIGSITE_2,
+		ItemID.NECKLACE_OF_DIGSITE_3, ItemID.NECKLACE_OF_DIGSITE_4, ItemID.NECKLACE_OF_DIGSITE_5),
 	ROYAL_SEED_POD("Royal seed pod", ItemID.MM2_ROYAL_SEED_POD),
 	GRAND_SEED_POD("Grand seed pod", ItemID.ALUFT_SEED_POD),
 	TELEPORT_CRYSTAL("Teleport crystal",

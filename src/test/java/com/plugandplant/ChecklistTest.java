@@ -10,6 +10,7 @@ import java.util.Set;
 import net.runelite.api.gameval.ItemID;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNull;
+import static org.junit.Assert.assertTrue;
 import org.junit.Test;
 
 public class ChecklistTest
@@ -411,5 +412,35 @@ public class ChecklistTest
 
 		assertEquals(new ChecklistItem("Pay: watermelons", "0 / 20", ChecklistItem.State.MISSING), find(build(TREES), "Pay: watermelons"));
 		assertEquals(Sapling.PINEAPPLE, Sapling.bySapling(ItemID.PLANTPOT_PINEAPPLE_SEED_WATERED));
+	}
+
+	@Test
+	public void spiritTreeNeedsEveryPartOfItsPaymentButNoCoins()
+	{
+		Checklist.Options spirits = new Checklist.Options(Presets.only(PatchType.SPIRIT_TREE), false, true, false, List.of());
+		ready(FarmLocation.PORT_SARIM.patches(PatchType.SPIRIT_TREE).get(0), PatchStatus.GROWN);
+		items.put(ItemID.PLANTPOT_SPIRIT_TREE_SAPLING, 1);
+		items.put(ItemID.MM_MONKEY_NUTS, 5);
+
+		List<ChecklistItem> checklist = build(spirits);
+		assertEquals(new ChecklistItem("Spirit saplings", "1 / 1", ChecklistItem.State.GOOD), find(checklist, "Spirit saplings"));
+		assertEquals(new ChecklistItem("Pay: monkey nuts", "5 / 5", ChecklistItem.State.GOOD), find(checklist, "Pay: monkey nuts"));
+		assertEquals(new ChecklistItem("Pay: monkey bar", "0 / 1", ChecklistItem.State.MISSING), find(checklist, "Pay: monkey bar"));
+		assertEquals(new ChecklistItem("Pay: ground tooth", "0 / 1", ChecklistItem.State.MISSING), find(checklist, "Pay: ground tooth"));
+		// A spirit tree is cleared with a spade, not by the gardener for coins
+		assertNull(find(checklist, "Coins"));
+	}
+
+	@Test
+	public void crystalTreeTakesAnAxeAndNoPayment()
+	{
+		Checklist.Options crystal = new Checklist.Options(Presets.only(PatchType.CRYSTAL_TREE), false, true, false, List.of());
+		ready(FarmLocation.PRIFDDINAS.patches(PatchType.CRYSTAL_TREE).get(0), PatchStatus.READY);
+		items.put(ItemID.PLANTPOT_CRYSTAL_TREE_SAPLING, 1);
+
+		List<ChecklistItem> checklist = build(crystal);
+		assertEquals(new ChecklistItem("Axe", "Not carried", ChecklistItem.State.MISSING), find(checklist, "Axe"));
+		assertTrue(checklist.stream().noneMatch(item -> item.getLabel().startsWith("Pay")));
+		assertNull(find(checklist, "Coins"));
 	}
 }

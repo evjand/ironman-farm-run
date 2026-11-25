@@ -19,7 +19,7 @@ import net.runelite.client.eventbus.Subscribe;
 
 /**
  * Keeps track of the gardeners in the scene who look after tree patches, so they can be highlighted
- * when it is time to pay them.
+ * when it is time to pay them, and of the tool leprechauns by herb patches, for noting herbs.
  *
  * A gardener is recognised by the NPC id Time Tracking knows them by, or else as an NPC offering to
  * be paid right beside a tree patch: some gardeners change ids with quests and game updates.
@@ -32,8 +32,11 @@ class Gardeners
 	 */
 	private static final int GARDENER_RANGE = 12;
 
+	private static final String TOOL_LEPRECHAUN = "Tool Leprechaun";
+
 	private final Client client;
 	private final Map<NPC, FarmPatch> gardeners = new HashMap<>();
+	private final Map<NPC, FarmLocation> leprechauns = new HashMap<>();
 
 	@Inject
 	Gardeners(Client client)
@@ -50,12 +53,21 @@ class Gardeners
 	}
 
 	/**
+	 * The tool leprechauns in the scene that stand at a location with a herb patch.
+	 */
+	Map<NPC, FarmLocation> leprechauns()
+	{
+		return Collections.unmodifiableMap(leprechauns);
+	}
+
+	/**
 	 * Finds the gardeners already in the scene. Only needed when tracking starts while logged in, as
 	 * spawn events cover everything after that.
 	 */
 	void scan()
 	{
 		gardeners.clear();
+		leprechauns.clear();
 		if (client.getGameState() != GameState.LOGGED_IN)
 		{
 			return;
@@ -70,6 +82,7 @@ class Gardeners
 	void clear()
 	{
 		gardeners.clear();
+		leprechauns.clear();
 	}
 
 	@Subscribe
@@ -88,6 +101,7 @@ class Gardeners
 	public void onNpcDespawned(NpcDespawned event)
 	{
 		gardeners.remove(event.getNpc());
+		leprechauns.remove(event.getNpc());
 	}
 
 	@Subscribe
@@ -103,7 +117,7 @@ class Gardeners
 			case LOADING:
 				break;
 			default:
-				gardeners.clear();
+				clear();
 				break;
 		}
 	}
@@ -119,6 +133,30 @@ class Gardeners
 		{
 			gardeners.remove(npc);
 		}
+
+		FarmLocation location = TOOL_LEPRECHAUN.equals(npc.getName()) ? herbLocationOf(npc) : null;
+		if (location != null)
+		{
+			leprechauns.put(npc, location);
+		}
+		else
+		{
+			leprechauns.remove(npc);
+		}
+	}
+
+	@Nullable
+	private FarmLocation herbLocationOf(NPC npc)
+	{
+		WorldPoint point = Positions.of(client, npc);
+		for (FarmLocation location : FarmLocation.values())
+		{
+			if (location.hasToolLeprechaun() && location.isNear(point, 0))
+			{
+				return location;
+			}
+		}
+		return null;
 	}
 
 	@Nullable

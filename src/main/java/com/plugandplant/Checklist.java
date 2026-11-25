@@ -115,7 +115,15 @@ final class Checklist
 		if (trees)
 		{
 			// A grown tree is taken down by its gardener for coins, or chopped, which needs an axe instead
-			int removals = plan.count(Step.CHECK_HEALTH) + plan.count(Step.REMOVE);
+			int removals = 0;
+			for (Map.Entry<FarmPatch, Step> step : plan.getSteps().entrySet())
+			{
+				boolean removal = step.getValue() == Step.CHECK_HEALTH || step.getValue() == Step.REMOVE;
+				if (removal && step.getKey().getType().isRemovedForCoins())
+				{
+					removals++;
+				}
+			}
 			if (removals > 0)
 			{
 				int needed = removals * REMOVAL_COINS;
@@ -183,6 +191,14 @@ final class Checklist
 		if (plan.getSteps().entrySet().stream().anyMatch(step -> step.getValue() == Step.CURE && !step.getKey().getType().isTree()))
 		{
 			items.add(tool("Plant cure", carried, List.of(ItemID.PLANT_CURE), true));
+		}
+		// Celastrus bark and crystal shards are cut from the tree
+		boolean chopping = plan.getSteps().entrySet().stream().anyMatch(step ->
+			(step.getValue() == Step.CHECK_HEALTH || step.getValue() == Step.HARVEST)
+				&& step.getKey().getType().harvestItems() == RunItems.AXES);
+		if (chopping)
+		{
+			items.add(tool("Axe", carried, RunItems.AXES, true));
 		}
 		if (seedPatches)
 		{
@@ -260,8 +276,7 @@ final class Checklist
 			int saplings = carried.count(sapling.getSapling()) + carried.count(sapling.getWateredSeedling());
 			if (saplings > 0)
 			{
-				needed.merge(sapling.getPayment(), saplings * sapling.getPaymentAmount(), Integer::sum);
-				names.putIfAbsent(sapling.getPayment(), sapling.getPaymentName());
+				add(needed, names, sapling, saplings);
 			}
 		}
 
@@ -281,8 +296,7 @@ final class Checklist
 			Sapling tree = states.getOrDefault(patch, PatchState.UNKNOWN).getCrop();
 			if (tree != null)
 			{
-				needed.merge(tree.getPayment(), tree.getPaymentAmount(), Integer::sum);
-				names.putIfAbsent(tree.getPayment(), tree.getPaymentName());
+				add(needed, names, tree, 1);
 			}
 		}
 
@@ -301,6 +315,15 @@ final class Checklist
 				"Bring saplings", ChecklistItem.State.UNSURE));
 		}
 		return items;
+	}
+
+	private static void add(Map<Integer, Integer> needed, Map<Integer, String> names, Sapling tree, int trees)
+	{
+		for (Sapling.Payment payment : tree.getPayments())
+		{
+			needed.merge(payment.getItem(), trees * payment.getAmount(), Integer::sum);
+			names.putIfAbsent(payment.getItem(), payment.getName());
+		}
 	}
 
 	/**

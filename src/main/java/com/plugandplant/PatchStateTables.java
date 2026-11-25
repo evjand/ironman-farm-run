@@ -36,6 +36,10 @@ package com.plugandplant;
  * An entry of zero or more is a healthy crop with that many growth ticks left before it is fully
  * grown. A negative entry is one of the constants below. For trees, the crop tables say which tree
  * is growing, which decides the gardener's payment.
+ *
+ * Two departures from Time Tracking, which only tells growing from done: a spirit tree whose health
+ * has been checked is {@link #GROWN} rather than still growing, and celastrus bark and crystal tree
+ * shards waiting to be taken are {@link #READY}, as taking them is what the visit is for.
  */
 final class PatchStateTables
 {
@@ -246,5 +250,365 @@ final class PatchStateTables
 		Sapling.DRAGONFRUIT, Sapling.DRAGONFRUIT, Sapling.DRAGONFRUIT, Sapling.DRAGONFRUIT, Sapling.DRAGONFRUIT, Sapling.DRAGONFRUIT, Sapling.DRAGONFRUIT, Sapling.DRAGONFRUIT,
 		Sapling.DRAGONFRUIT, Sapling.DRAGONFRUIT, Sapling.DRAGONFRUIT, Sapling.DRAGONFRUIT, Sapling.DRAGONFRUIT, Sapling.DRAGONFRUIT, Sapling.DRAGONFRUIT, Sapling.DRAGONFRUIT,
 		Sapling.DRAGONFRUIT, Sapling.DRAGONFRUIT, Sapling.DRAGONFRUIT, Sapling.DRAGONFRUIT, Sapling.DRAGONFRUIT, Sapling.DRAGONFRUIT, null, null,
+	};
+
+	/**
+	 * Growth tick: 640 minutes.
+	 */
+	static final int[] HARDWOOD_TREE = {
+		-3, -3, -3, -2, -3, -3, -3, -3, 7, 6, 5, 4, 3, 2, 1, -7,
+		-8, -9, -5, -5, -5, -5, -5, -5, -6, -6, -6, -6, -6, -6, 8, 7,
+		6, 5, 4, 3, 2, 1, -7, -8, -9, -5, -5, -5, -5, -5, -5, -5,
+		-6, -6, -6, -6, -6, -6, -6, 8, 7, 6, 5, 4, 3, 2, 1, -7,
+		-8, -9, -5, -5, -5, -5, -5, -5, -5, -6, -6, -6, -6, -6, -6, -6,
+		8, 7, 6, 5, 4, 3, 2, 1, -7, -8, -9, -5, -5, -5, -5, -5,
+		-5, -5, -6, -6, -6, -6, -6, -6, -6, 9, 8, 7, 6, 5, 4, 3,
+		2, 1, -7, -8, -9, -5, -5, -5, -5, -5, -5, -5, -5, -6, -6, -6,
+		-6, -6, -6, -6, -6, -3, -3, -3, -3, -3, -3, -3, -3, -3, -3, -3,
+		-3, -3, -3, -3, -3, -3, -3, -3, -3, -3, -3, -3, -3, -3, -3, -3,
+		-3, -3, -3, -3, -3, -3, -3, -3, -3, -3, -3, -3, -3, -3, -3, -3,
+		-3, -3, -3, -3, -3, -3, -3, -3, -3, -3, -3, -3, -3, -3, -3, -3,
+		-3, -3, -3, -3, -3, -3, -3, -3, -3, -3, -3, -3, -3, -3, -3, -3,
+		-3, -3, -3, -3, -3, -3, -3, -3, -3, -3, -3, -3, -3, -3, -3, -3,
+		-3, -3, -3, -3, -3, -3, -3, -3, -3, -3, -3, -3, -3, -3, -3, -3,
+		-3, -3, -3, -3, -3, -3, -3, -3, -3, -3, -3, -3, -3, -3, -3, -3,
+	};
+
+	/**
+	 * The crop growing at each hardwood tree varbit value, or null.
+	 */
+	static final Sapling[] HARDWOOD_TREE_CROPS = {
+		null, null, null, null, null, null, null, null,
+		Sapling.TEAK, Sapling.TEAK, Sapling.TEAK, Sapling.TEAK, Sapling.TEAK, Sapling.TEAK, Sapling.TEAK, Sapling.TEAK,
+		Sapling.TEAK, Sapling.TEAK, Sapling.TEAK, Sapling.TEAK, Sapling.TEAK, Sapling.TEAK, Sapling.TEAK, Sapling.TEAK,
+		Sapling.TEAK, Sapling.TEAK, Sapling.TEAK, Sapling.TEAK, Sapling.TEAK, Sapling.TEAK, Sapling.MAHOGANY, Sapling.MAHOGANY,
+		Sapling.MAHOGANY, Sapling.MAHOGANY, Sapling.MAHOGANY, Sapling.MAHOGANY, Sapling.MAHOGANY, Sapling.MAHOGANY, Sapling.MAHOGANY, Sapling.MAHOGANY,
+		Sapling.MAHOGANY, Sapling.MAHOGANY, Sapling.MAHOGANY, Sapling.MAHOGANY, Sapling.MAHOGANY, Sapling.MAHOGANY, Sapling.MAHOGANY, Sapling.MAHOGANY,
+		Sapling.MAHOGANY, Sapling.MAHOGANY, Sapling.MAHOGANY, Sapling.MAHOGANY, Sapling.MAHOGANY, Sapling.MAHOGANY, Sapling.MAHOGANY, Sapling.CAMPHOR,
+		Sapling.CAMPHOR, Sapling.CAMPHOR, Sapling.CAMPHOR, Sapling.CAMPHOR, Sapling.CAMPHOR, Sapling.CAMPHOR, Sapling.CAMPHOR, Sapling.CAMPHOR,
+		Sapling.CAMPHOR, Sapling.CAMPHOR, Sapling.CAMPHOR, Sapling.CAMPHOR, Sapling.CAMPHOR, Sapling.CAMPHOR, Sapling.CAMPHOR, Sapling.CAMPHOR,
+		Sapling.CAMPHOR, Sapling.CAMPHOR, Sapling.CAMPHOR, Sapling.CAMPHOR, Sapling.CAMPHOR, Sapling.CAMPHOR, Sapling.CAMPHOR, Sapling.CAMPHOR,
+		Sapling.IRONWOOD, Sapling.IRONWOOD, Sapling.IRONWOOD, Sapling.IRONWOOD, Sapling.IRONWOOD, Sapling.IRONWOOD, Sapling.IRONWOOD, Sapling.IRONWOOD,
+		Sapling.IRONWOOD, Sapling.IRONWOOD, Sapling.IRONWOOD, Sapling.IRONWOOD, Sapling.IRONWOOD, Sapling.IRONWOOD, Sapling.IRONWOOD, Sapling.IRONWOOD,
+		Sapling.IRONWOOD, Sapling.IRONWOOD, Sapling.IRONWOOD, Sapling.IRONWOOD, Sapling.IRONWOOD, Sapling.IRONWOOD, Sapling.IRONWOOD, Sapling.IRONWOOD,
+		Sapling.IRONWOOD, Sapling.ROSEWOOD, Sapling.ROSEWOOD, Sapling.ROSEWOOD, Sapling.ROSEWOOD, Sapling.ROSEWOOD, Sapling.ROSEWOOD, Sapling.ROSEWOOD,
+		Sapling.ROSEWOOD, Sapling.ROSEWOOD, Sapling.ROSEWOOD, Sapling.ROSEWOOD, Sapling.ROSEWOOD, Sapling.ROSEWOOD, Sapling.ROSEWOOD, Sapling.ROSEWOOD,
+		Sapling.ROSEWOOD, Sapling.ROSEWOOD, Sapling.ROSEWOOD, Sapling.ROSEWOOD, Sapling.ROSEWOOD, Sapling.ROSEWOOD, Sapling.ROSEWOOD, Sapling.ROSEWOOD,
+		Sapling.ROSEWOOD, Sapling.ROSEWOOD, Sapling.ROSEWOOD, Sapling.ROSEWOOD, Sapling.ROSEWOOD, null, null, null,
+		null, null, null, null, null, null, null, null,
+		null, null, null, null, null, null, null, null,
+		null, null, null, null, null, null, null, null,
+		null, null, null, null, null, null, null, null,
+		null, null, null, null, null, null, null, null,
+		null, null, null, null, null, null, null, null,
+		null, null, null, null, null, null, null, null,
+		null, null, null, null, null, null, null, null,
+		null, null, null, null, null, null, null, null,
+		null, null, null, null, null, null, null, null,
+		null, null, null, null, null, null, null, null,
+		null, null, null, null, null, null, null, null,
+		null, null, null, null, null, null, null, null,
+		null, null, null, null, null, null, null, null,
+		null, null, null, null, null, null, null, null,
+	};
+
+	/**
+	 * Growth tick: 160 minutes.
+	 */
+	static final int[] CALQUAT = {
+		-3, -3, -3, -2, 8, 7, 6, 5, 4, 3, 2, 1, -8, -8, -8, -8,
+		-8, -8, -8, -5, -5, -5, -5, -5, -5, -5, -6, -6, -6, -6, -6, -6,
+		-6, -6, -7, -3, -3, -3, -3, -3, -3, -3, -3, -3, -3, -3, -3, -3,
+		-3, -3, -3, -3, -3, -3, -3, -3, -3, -3, -3, -3, -3, -3, -3, -3,
+		-3, -3, -3, -3, -3, -3, -3, -3, -3, -3, -3, -3, -3, -3, -3, -3,
+		-3, -3, -3, -3, -3, -3, -3, -3, -3, -3, -3, -3, -3, -3, -3, -3,
+		-3, -3, -3, -3, -3, -3, -3, -3, -3, -3, -3, -3, -3, -3, -3, -3,
+		-3, -3, -3, -3, -3, -3, -3, -3, -3, -3, -3, -3, -3, -3, -3, -3,
+		-3, -3, -3, -3, -3, -3, -3, -3, -3, -3, -3, -3, -3, -3, -3, -3,
+		-3, -3, -3, -3, -3, -3, -3, -3, -3, -3, -3, -3, -3, -3, -3, -3,
+		-3, -3, -3, -3, -3, -3, -3, -3, -3, -3, -3, -3, -3, -3, -3, -3,
+		-3, -3, -3, -3, -3, -3, -3, -3, -3, -3, -3, -3, -3, -3, -3, -3,
+		-3, -3, -3, -3, -3, -3, -3, -3, -3, -3, -3, -3, -3, -3, -3, -3,
+		-3, -3, -3, -3, -3, -3, -3, -3, -3, -3, -3, -3, -3, -3, -3, -3,
+		-3, -3, -3, -3, -3, -3, -3, -3, -3, -3, -3, -3, -3, -3, -3, -3,
+		-3, -3, -3, -3, -3, -3, -3, -3, -3, -3, -3, -3, -3, -3, -3, -3,
+	};
+
+	/**
+	 * The crop growing at each calquat varbit value, or null.
+	 */
+	static final Sapling[] CALQUAT_CROPS = {
+		null, null, null, null, Sapling.CALQUAT, Sapling.CALQUAT, Sapling.CALQUAT, Sapling.CALQUAT,
+		Sapling.CALQUAT, Sapling.CALQUAT, Sapling.CALQUAT, Sapling.CALQUAT, Sapling.CALQUAT, Sapling.CALQUAT, Sapling.CALQUAT, Sapling.CALQUAT,
+		Sapling.CALQUAT, Sapling.CALQUAT, Sapling.CALQUAT, Sapling.CALQUAT, Sapling.CALQUAT, Sapling.CALQUAT, Sapling.CALQUAT, Sapling.CALQUAT,
+		Sapling.CALQUAT, Sapling.CALQUAT, Sapling.CALQUAT, Sapling.CALQUAT, Sapling.CALQUAT, Sapling.CALQUAT, Sapling.CALQUAT, Sapling.CALQUAT,
+		Sapling.CALQUAT, Sapling.CALQUAT, Sapling.CALQUAT, null, null, null, null, null,
+		null, null, null, null, null, null, null, null,
+		null, null, null, null, null, null, null, null,
+		null, null, null, null, null, null, null, null,
+		null, null, null, null, null, null, null, null,
+		null, null, null, null, null, null, null, null,
+		null, null, null, null, null, null, null, null,
+		null, null, null, null, null, null, null, null,
+		null, null, null, null, null, null, null, null,
+		null, null, null, null, null, null, null, null,
+		null, null, null, null, null, null, null, null,
+		null, null, null, null, null, null, null, null,
+		null, null, null, null, null, null, null, null,
+		null, null, null, null, null, null, null, null,
+		null, null, null, null, null, null, null, null,
+		null, null, null, null, null, null, null, null,
+		null, null, null, null, null, null, null, null,
+		null, null, null, null, null, null, null, null,
+		null, null, null, null, null, null, null, null,
+		null, null, null, null, null, null, null, null,
+		null, null, null, null, null, null, null, null,
+		null, null, null, null, null, null, null, null,
+		null, null, null, null, null, null, null, null,
+		null, null, null, null, null, null, null, null,
+		null, null, null, null, null, null, null, null,
+		null, null, null, null, null, null, null, null,
+		null, null, null, null, null, null, null, null,
+		null, null, null, null, null, null, null, null,
+	};
+
+	/**
+	 * Growth tick: 320 minutes.
+	 */
+	static final int[] SPIRIT_TREE = {
+		-3, -3, -3, -2, -3, -3, -3, -3, 12, 11, 10, 9, 8, 7, 6, 5,
+		4, 3, 2, 1, -8, -5, -5, -5, -5, -5, -5, -5, -5, -5, -5, -5,
+		-6, -6, -6, -6, -6, -6, -6, -6, -6, -6, -6, -6, -7, -3, -3, -3,
+		-3, -3, -3, -3, -3, -3, -3, -3, -3, -3, -3, -3, -3, -3, -3, -3,
+		-1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
+		-1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
+		-1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
+		-1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
+		-1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
+		-1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
+		-1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
+		-1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
+		-1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
+		-1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
+		-1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
+		-1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
+	};
+
+	/**
+	 * The crop growing at each spirit tree varbit value, or null.
+	 */
+	static final Sapling[] SPIRIT_TREE_CROPS = {
+		null, null, null, null, null, null, null, null,
+		Sapling.SPIRIT_TREE, Sapling.SPIRIT_TREE, Sapling.SPIRIT_TREE, Sapling.SPIRIT_TREE, Sapling.SPIRIT_TREE, Sapling.SPIRIT_TREE, Sapling.SPIRIT_TREE, Sapling.SPIRIT_TREE,
+		Sapling.SPIRIT_TREE, Sapling.SPIRIT_TREE, Sapling.SPIRIT_TREE, Sapling.SPIRIT_TREE, Sapling.SPIRIT_TREE, Sapling.SPIRIT_TREE, Sapling.SPIRIT_TREE, Sapling.SPIRIT_TREE,
+		Sapling.SPIRIT_TREE, Sapling.SPIRIT_TREE, Sapling.SPIRIT_TREE, Sapling.SPIRIT_TREE, Sapling.SPIRIT_TREE, Sapling.SPIRIT_TREE, Sapling.SPIRIT_TREE, Sapling.SPIRIT_TREE,
+		Sapling.SPIRIT_TREE, Sapling.SPIRIT_TREE, Sapling.SPIRIT_TREE, Sapling.SPIRIT_TREE, Sapling.SPIRIT_TREE, Sapling.SPIRIT_TREE, Sapling.SPIRIT_TREE, Sapling.SPIRIT_TREE,
+		Sapling.SPIRIT_TREE, Sapling.SPIRIT_TREE, Sapling.SPIRIT_TREE, Sapling.SPIRIT_TREE, Sapling.SPIRIT_TREE, null, null, null,
+		null, null, null, null, null, null, null, null,
+		null, null, null, null, null, null, null, null,
+		null, null, null, null, null, null, null, null,
+		null, null, null, null, null, null, null, null,
+		null, null, null, null, null, null, null, null,
+		null, null, null, null, null, null, null, null,
+		null, null, null, null, null, null, null, null,
+		null, null, null, null, null, null, null, null,
+		null, null, null, null, null, null, null, null,
+		null, null, null, null, null, null, null, null,
+		null, null, null, null, null, null, null, null,
+		null, null, null, null, null, null, null, null,
+		null, null, null, null, null, null, null, null,
+		null, null, null, null, null, null, null, null,
+		null, null, null, null, null, null, null, null,
+		null, null, null, null, null, null, null, null,
+		null, null, null, null, null, null, null, null,
+		null, null, null, null, null, null, null, null,
+		null, null, null, null, null, null, null, null,
+		null, null, null, null, null, null, null, null,
+		null, null, null, null, null, null, null, null,
+		null, null, null, null, null, null, null, null,
+		null, null, null, null, null, null, null, null,
+		null, null, null, null, null, null, null, null,
+		null, null, null, null, null, null, null, null,
+		null, null, null, null, null, null, null, null,
+	};
+
+	/**
+	 * Growth tick: 160 minutes.
+	 */
+	static final int[] CELASTRUS = {
+		-3, -3, -3, -2, -3, -3, -3, -3, 5, 4, 3, 2, 1, -7, -4, -4,
+		-4, -8, -5, -5, -5, -5, -5, -6, -6, -6, -6, -6, -9, -3, -3, -3,
+		-3, -3, -3, -3, -3, -3, -3, -3, -3, -3, -3, -3, -3, -3, -3, -3,
+		-3, -3, -3, -3, -3, -3, -3, -3, -3, -3, -3, -3, -3, -3, -3, -3,
+		-3, -3, -3, -3, -3, -3, -3, -3, -3, -3, -3, -3, -3, -3, -3, -3,
+		-3, -3, -3, -3, -3, -3, -3, -3, -3, -3, -3, -3, -3, -3, -3, -3,
+		-3, -3, -3, -3, -3, -3, -3, -3, -3, -3, -3, -3, -3, -3, -3, -3,
+		-3, -3, -3, -3, -3, -3, -3, -3, -3, -3, -3, -3, -3, -3, -3, -3,
+		-3, -3, -3, -3, -3, -3, -3, -3, -3, -3, -3, -3, -3, -3, -3, -3,
+		-3, -3, -3, -3, -3, -3, -3, -3, -3, -3, -3, -3, -3, -3, -3, -3,
+		-3, -3, -3, -3, -3, -3, -3, -3, -3, -3, -3, -3, -3, -3, -3, -3,
+		-3, -3, -3, -3, -3, -3, -3, -3, -3, -3, -3, -3, -3, -3, -3, -3,
+		-3, -3, -3, -3, -3, -3, -3, -3, -3, -3, -3, -3, -3, -3, -3, -3,
+		-3, -3, -3, -3, -3, -3, -3, -3, -3, -3, -3, -3, -3, -3, -3, -3,
+		-3, -3, -3, -3, -3, -3, -3, -3, -3, -3, -3, -3, -3, -3, -3, -3,
+		-3, -3, -3, -3, -3, -3, -3, -3, -3, -3, -3, -3, -3, -3, -3, -3,
+	};
+
+	/**
+	 * The crop growing at each celastrus varbit value, or null.
+	 */
+	static final Sapling[] CELASTRUS_CROPS = {
+		null, null, null, null, null, null, null, null,
+		Sapling.CELASTRUS, Sapling.CELASTRUS, Sapling.CELASTRUS, Sapling.CELASTRUS, Sapling.CELASTRUS, Sapling.CELASTRUS, Sapling.CELASTRUS, Sapling.CELASTRUS,
+		Sapling.CELASTRUS, Sapling.CELASTRUS, Sapling.CELASTRUS, Sapling.CELASTRUS, Sapling.CELASTRUS, Sapling.CELASTRUS, Sapling.CELASTRUS, Sapling.CELASTRUS,
+		Sapling.CELASTRUS, Sapling.CELASTRUS, Sapling.CELASTRUS, Sapling.CELASTRUS, Sapling.CELASTRUS, null, null, null,
+		null, null, null, null, null, null, null, null,
+		null, null, null, null, null, null, null, null,
+		null, null, null, null, null, null, null, null,
+		null, null, null, null, null, null, null, null,
+		null, null, null, null, null, null, null, null,
+		null, null, null, null, null, null, null, null,
+		null, null, null, null, null, null, null, null,
+		null, null, null, null, null, null, null, null,
+		null, null, null, null, null, null, null, null,
+		null, null, null, null, null, null, null, null,
+		null, null, null, null, null, null, null, null,
+		null, null, null, null, null, null, null, null,
+		null, null, null, null, null, null, null, null,
+		null, null, null, null, null, null, null, null,
+		null, null, null, null, null, null, null, null,
+		null, null, null, null, null, null, null, null,
+		null, null, null, null, null, null, null, null,
+		null, null, null, null, null, null, null, null,
+		null, null, null, null, null, null, null, null,
+		null, null, null, null, null, null, null, null,
+		null, null, null, null, null, null, null, null,
+		null, null, null, null, null, null, null, null,
+		null, null, null, null, null, null, null, null,
+		null, null, null, null, null, null, null, null,
+		null, null, null, null, null, null, null, null,
+		null, null, null, null, null, null, null, null,
+		null, null, null, null, null, null, null, null,
+		null, null, null, null, null, null, null, null,
+	};
+
+	/**
+	 * Growth tick: 640 minutes.
+	 */
+	static final int[] REDWOOD = {
+		-3, -3, -3, -2, -3, -3, -3, -3, 10, 9, 8, 7, 6, 5, 4, 3,
+		2, 1, -8, -5, -5, -5, -5, -5, -5, -5, -5, -5, -6, -6, -6, -6,
+		-6, -6, -6, -6, -6, -7, -1, -1, -1, -8, -8, -8, -8, -8, -8, -8,
+		-8, -8, -8, -8, -8, -8, -8, -8, -1, -1, -1, -1, -1, -1, -1, -1,
+		-1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
+		-1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
+		-1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
+		-1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
+		-1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
+		-1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
+		-1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
+		-1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
+		-1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
+		-1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
+		-1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
+		-1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
+	};
+
+	/**
+	 * The crop growing at each redwood varbit value, or null.
+	 */
+	static final Sapling[] REDWOOD_CROPS = {
+		null, null, null, null, null, null, null, null,
+		Sapling.REDWOOD, Sapling.REDWOOD, Sapling.REDWOOD, Sapling.REDWOOD, Sapling.REDWOOD, Sapling.REDWOOD, Sapling.REDWOOD, Sapling.REDWOOD,
+		Sapling.REDWOOD, Sapling.REDWOOD, Sapling.REDWOOD, Sapling.REDWOOD, Sapling.REDWOOD, Sapling.REDWOOD, Sapling.REDWOOD, Sapling.REDWOOD,
+		Sapling.REDWOOD, Sapling.REDWOOD, Sapling.REDWOOD, Sapling.REDWOOD, Sapling.REDWOOD, Sapling.REDWOOD, Sapling.REDWOOD, Sapling.REDWOOD,
+		Sapling.REDWOOD, Sapling.REDWOOD, Sapling.REDWOOD, Sapling.REDWOOD, Sapling.REDWOOD, Sapling.REDWOOD, null, null,
+		null, Sapling.REDWOOD, Sapling.REDWOOD, Sapling.REDWOOD, Sapling.REDWOOD, Sapling.REDWOOD, Sapling.REDWOOD, Sapling.REDWOOD,
+		Sapling.REDWOOD, Sapling.REDWOOD, Sapling.REDWOOD, Sapling.REDWOOD, Sapling.REDWOOD, Sapling.REDWOOD, Sapling.REDWOOD, Sapling.REDWOOD,
+		null, null, null, null, null, null, null, null,
+		null, null, null, null, null, null, null, null,
+		null, null, null, null, null, null, null, null,
+		null, null, null, null, null, null, null, null,
+		null, null, null, null, null, null, null, null,
+		null, null, null, null, null, null, null, null,
+		null, null, null, null, null, null, null, null,
+		null, null, null, null, null, null, null, null,
+		null, null, null, null, null, null, null, null,
+		null, null, null, null, null, null, null, null,
+		null, null, null, null, null, null, null, null,
+		null, null, null, null, null, null, null, null,
+		null, null, null, null, null, null, null, null,
+		null, null, null, null, null, null, null, null,
+		null, null, null, null, null, null, null, null,
+		null, null, null, null, null, null, null, null,
+		null, null, null, null, null, null, null, null,
+		null, null, null, null, null, null, null, null,
+		null, null, null, null, null, null, null, null,
+		null, null, null, null, null, null, null, null,
+		null, null, null, null, null, null, null, null,
+		null, null, null, null, null, null, null, null,
+		null, null, null, null, null, null, null, null,
+		null, null, null, null, null, null, null, null,
+		null, null, null, null, null, null, null, null,
+	};
+
+	/**
+	 * Growth tick: 80 minutes.
+	 */
+	static final int[] CRYSTAL_TREE = {
+		-3, -3, -3, -2, -1, -1, -1, -1, 6, 5, 4, 3, 2, 1, -7, -4,
+		-1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
+		-1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
+		-1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
+		-1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
+		-1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
+		-1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
+		-1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
+		-1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
+		-1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
+		-1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
+		-1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
+		-1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
+		-1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
+		-1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
+		-1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
+	};
+
+	/**
+	 * The crop growing at each crystal tree varbit value, or null.
+	 */
+	static final Sapling[] CRYSTAL_TREE_CROPS = {
+		null, null, null, null, null, null, null, null,
+		Sapling.CRYSTAL_TREE, Sapling.CRYSTAL_TREE, Sapling.CRYSTAL_TREE, Sapling.CRYSTAL_TREE, Sapling.CRYSTAL_TREE, Sapling.CRYSTAL_TREE, Sapling.CRYSTAL_TREE, Sapling.CRYSTAL_TREE,
+		null, null, null, null, null, null, null, null,
+		null, null, null, null, null, null, null, null,
+		null, null, null, null, null, null, null, null,
+		null, null, null, null, null, null, null, null,
+		null, null, null, null, null, null, null, null,
+		null, null, null, null, null, null, null, null,
+		null, null, null, null, null, null, null, null,
+		null, null, null, null, null, null, null, null,
+		null, null, null, null, null, null, null, null,
+		null, null, null, null, null, null, null, null,
+		null, null, null, null, null, null, null, null,
+		null, null, null, null, null, null, null, null,
+		null, null, null, null, null, null, null, null,
+		null, null, null, null, null, null, null, null,
+		null, null, null, null, null, null, null, null,
+		null, null, null, null, null, null, null, null,
+		null, null, null, null, null, null, null, null,
+		null, null, null, null, null, null, null, null,
+		null, null, null, null, null, null, null, null,
+		null, null, null, null, null, null, null, null,
+		null, null, null, null, null, null, null, null,
+		null, null, null, null, null, null, null, null,
+		null, null, null, null, null, null, null, null,
+		null, null, null, null, null, null, null, null,
+		null, null, null, null, null, null, null, null,
+		null, null, null, null, null, null, null, null,
+		null, null, null, null, null, null, null, null,
+		null, null, null, null, null, null, null, null,
+		null, null, null, null, null, null, null, null,
+		null, null, null, null, null, null, null, null,
 	};
 }

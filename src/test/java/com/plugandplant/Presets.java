@@ -13,6 +13,17 @@ final class Presets
 	}
 
 	/**
+	 * A run that visits for one kind of special tree and nothing else.
+	 */
+	static RunPreset only(PatchType type)
+	{
+		return RunPreset.treeRun()
+			.withRole(PatchType.TREE, PatchRole.OFF)
+			.withRole(PatchType.FRUIT_TREE, PatchRole.OFF)
+			.withRole(type, PatchRole.VISIT);
+	}
+
+	/**
 	 * A herb run, tending allotments and flowers while there if asked to.
 	 */
 	static RunPreset herbs(boolean allotments, boolean flowers)

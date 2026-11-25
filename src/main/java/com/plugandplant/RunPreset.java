@@ -27,7 +27,8 @@ class RunPreset
 	 * The patch types a run can cover, in the order the side panel lists them.
 	 */
 	static final List<PatchType> TYPES = List.of(PatchType.HERB, PatchType.FLOWER, PatchType.ALLOTMENT, PatchType.TREE,
-		PatchType.FRUIT_TREE);
+		PatchType.FRUIT_TREE, PatchType.HARDWOOD_TREE, PatchType.CALQUAT, PatchType.SPIRIT_TREE, PatchType.CELASTRUS,
+		PatchType.REDWOOD, PatchType.CRYSTAL_TREE);
 
 	String id;
 	String name;
@@ -44,11 +45,19 @@ class RunPreset
 	boolean protect;
 	boolean graceful;
 	boolean volcanicAsh;
+	/**
+	 * Whether harvested herbs are taken to the tool leprechaun to be noted before moving on.
+	 */
+	boolean noteHerbs;
+	/**
+	 * Whether allotment and flower produce is noted too, which some players compost instead.
+	 */
+	boolean noteAllotmentsAndFlowers;
 
 	static RunPreset herbRun()
 	{
 		return new RunPreset(HERB_ID, "Herb run", roles(PatchType.HERB, PatchRole.VISIT), Set.of(), Map.of(),
-			true, true, false, false);
+			true, true, false, false, false, false);
 	}
 
 	static RunPreset treeRun()
@@ -56,7 +65,7 @@ class RunPreset
 		Map<PatchType, PatchRole> roles = roles(PatchType.TREE, PatchRole.VISIT);
 		roles.put(PatchType.FRUIT_TREE, PatchRole.VISIT);
 		return new RunPreset(TREE_ID, "Tree run", Collections.unmodifiableMap(roles), Set.of(), Map.of(),
-			true, true, false, false);
+			true, true, false, false, false, false);
 	}
 
 	private static Map<PatchType, PatchRole> roles(PatchType type, PatchRole role)
@@ -98,7 +107,27 @@ class RunPreset
 
 	boolean includesTrees()
 	{
-		return includes(PatchType.TREE) || includes(PatchType.FRUIT_TREE);
+		return TYPES.stream().anyMatch(type -> type.isTree() && includes(type));
+	}
+
+	/**
+	 * The kinds of patch whose produce the run notes at the tool leprechaun.
+	 */
+	Set<PatchType> notedTypes()
+	{
+		Set<PatchType> noted = EnumSet.noneOf(PatchType.class);
+		if (noteHerbs && includes(PatchType.HERB))
+		{
+			noted.add(PatchType.HERB);
+		}
+		for (PatchType type : List.of(PatchType.ALLOTMENT, PatchType.FLOWER))
+		{
+			if (noteAllotmentsAndFlowers && includes(type))
+			{
+				noted.add(type);
+			}
+		}
+		return noted;
 	}
 
 	/**

@@ -10,7 +10,7 @@ import net.runelite.api.gameval.VarbitID;
 
 /**
  * The farming locations runs stop at: those with a herb patch, each with the allotments and flower
- * patch beside it, and those with tree or fruit tree patches. Regions and varbits are the ones the
+ * patch beside it, and those with tree patches of any kind. Regions and varbits are the ones the
  * Time Tracking plugin files each patch under.
  */
 @Getter
@@ -47,11 +47,14 @@ public enum FarmLocation
 		new Patches(6967).herb(VarbitID.FARMING_TRANSMIT_D, new WorldPoint(1738, 3550, 0))
 			.allotment("North-east allotment", VarbitID.FARMING_TRANSMIT_A)
 			.allotment("South-west allotment", VarbitID.FARMING_TRANSMIT_B)
-			.flower(VarbitID.FARMING_TRANSMIT_C),
+			.flower(VarbitID.FARMING_TRANSMIT_C)
+			.tree(PatchType.SPIRIT_TREE, VarbitID.FARMING_TRANSMIT_F, new WorldPoint(1693, 3542, 0),
+				NpcID.FARMING_GARDENER_SPIRIT_TREE_4),
 		Teleport.XERICS_TALISMAN, Teleport.HOSIDIUS_TAB, Teleport.CONSTRUCTION_CAPE, Teleport.KHAREDSTS_MEMOIRS,
 		Teleport.SKILLS_NECKLACE, Teleport.FAIRY_RING),
 	// The guild's patches are spread out, hence the wider radius. Its wings take a Farming level to
-	// enter: 45 for the allotments and flowers, 65 for the herb and tree, 85 for the fruit tree.
+	// enter: 45 for the allotments and flowers, 65 for the herb and tree, 85 for the fruit tree and
+	// the special trees.
 	FARMING_GUILD("Farming Guild", 45,
 		new Patches(4922).smallPatchesFromLevel(45)
 			.herb(VarbitID.FARMING_TRANSMIT_E, new WorldPoint(1238, 3726, 0), 65)
@@ -59,7 +62,13 @@ public enum FarmLocation
 			.allotment("South allotment", VarbitID.FARMING_TRANSMIT_D)
 			.flower(VarbitID.FARMING_TRANSMIT_H)
 			.tree(VarbitID.FARMING_TRANSMIT_G, new WorldPoint(1232, 3736, 0), NpcID.FARMING_GARDENER_FARMGUILD_T2, 65)
-			.fruitTree(VarbitID.FARMING_TRANSMIT_K, new WorldPoint(1242, 3758, 0), NpcID.FARMING_GARDENER_FARMGUILD_T3, 85),
+			.fruitTree(VarbitID.FARMING_TRANSMIT_K, new WorldPoint(1242, 3758, 0), NpcID.FARMING_GARDENER_FARMGUILD_T3, 85)
+			.tree(PatchType.SPIRIT_TREE, VarbitID.FARMING_TRANSMIT_A, new WorldPoint(1253, 3750, 0),
+				NpcID.FARMING_GARDENER_SPIRIT_TREE_5, 85)
+			.tree(PatchType.CELASTRUS, VarbitID.FARMING_TRANSMIT_L, new WorldPoint(1244, 3750, 0),
+				NpcID.FARMING_GARDENER_FARMGUILD_CELASTRUS, 85)
+			.tree(PatchType.REDWOOD, VarbitID.FARMING_TRANSMIT_I, new WorldPoint(1229, 3755, 0),
+				NpcID.FARMING_GARDENER_FARMGUILD_REDWOOD, 85),
 		Teleport.FARMING_CAPE, Teleport.SKILLS_NECKLACE, Teleport.BATTLEFRONT_TELEPORT, Teleport.FAIRY_RING),
 	CIVITAS("Ortus Farm", 20,
 		new Patches(6192).herb(VarbitID.FARMING_TRANSMIT_D, new WorldPoint(1582, 3094, 0))
@@ -103,7 +112,9 @@ public enum FarmLocation
 		new Patches(9777).fruitTree(VarbitID.FARMING_TRANSMIT_A, new WorldPoint(2490, 3180, 0), NpcID.FARMING_GARDENER_FRUIT_2),
 		Teleport.FAIRY_RING),
 	BRIMHAVEN("Brimhaven", 20,
-		new Patches(11058).fruitTree(VarbitID.FARMING_TRANSMIT_A, new WorldPoint(2765, 3213, 0), NpcID.GARTH),
+		new Patches(11058).fruitTree(VarbitID.FARMING_TRANSMIT_A, new WorldPoint(2765, 3213, 0), NpcID.GARTH)
+			.tree(PatchType.SPIRIT_TREE, VarbitID.FARMING_TRANSMIT_B, new WorldPoint(2802, 3203, 0),
+				NpcID.FARMING_GARDENER_SPIRIT_TREE_3),
 		Teleport.BRIMHAVEN_TAB, Teleport.CONSTRUCTION_CAPE, Teleport.KARAMJA_GLOVES, Teleport.AMULET_OF_GLORY,
 		Teleport.ARDOUGNE_TELEPORT),
 	CATHERBY_ORCHARD("East of Catherby", 20,
@@ -113,8 +124,45 @@ public enum FarmLocation
 		new Patches(9265).fruitTree(VarbitID.FARMING_TRANSMIT_A, new WorldPoint(2347, 3162, 0), NpcID.FARMING_GARDENER_FRUIT_TREE_5),
 		Teleport.TELEPORT_CRYSTAL, Teleport.ETERNAL_TELEPORT_CRYSTAL),
 	KASTORI("Kastori", 20,
-		new Patches(5423).fruitTree(VarbitID.FARMING_TRANSMIT_B, new WorldPoint(1350, 3057, 0), NpcID.FARMING_GARDENER_FRUIT_7),
-		Teleport.PENDANT_OF_ATES, Teleport.QUETZAL_WHISTLE);
+		new Patches(5423).fruitTree(VarbitID.FARMING_TRANSMIT_B, new WorldPoint(1350, 3057, 0), NpcID.FARMING_GARDENER_FRUIT_7)
+			.tree(PatchType.CALQUAT, VarbitID.FARMING_TRANSMIT_A, new WorldPoint(1367, 3032, 0),
+				NpcID.FARMING_GARDENER_CALQUAT_2),
+		Teleport.PENDANT_OF_ATES, Teleport.QUETZAL_WHISTLE),
+
+	TAI_BWO_WANNAI("Tai Bwo Wannai", 20,
+		new Patches(11056).tree(PatchType.CALQUAT, VarbitID.FARMING_TRANSMIT_A, new WorldPoint(2796, 3101, 0),
+			NpcID.FARMING_GARDENER_CALQUAT),
+		Teleport.TAI_BWO_WANNAI_TELEPORT, Teleport.FAIRY_RING),
+	// Reached through the Great Conch, which takes part of Troubled Tortugans
+	SUMMER_SHORE("The Summer Shore", 20,
+		new Patches(12581).tree(PatchType.CALQUAT, VarbitID.FARMING_TRANSMIT_C, new WorldPoint(3128, 2405, 0),
+			NpcID.FARMING_GARDENER_CALQUAT_3),
+		Teleport.FAIRY_RING),
+	FOSSIL_ISLAND("Fossil Island", 20,
+		new Patches(14651)
+			.tree(PatchType.HARDWOOD_TREE, "East hardwood patch", VarbitID.FARMING_TRANSMIT_A, new WorldPoint(3715, 3835, 0),
+				NpcID.FOSSIL_SQUIRREL_GARDENER1, 1)
+			.tree(PatchType.HARDWOOD_TREE, "Middle hardwood patch", VarbitID.FARMING_TRANSMIT_B, new WorldPoint(3709, 3835, 0),
+				NpcID.FOSSIL_SQUIRREL_GARDENER2, 1)
+			.tree(PatchType.HARDWOOD_TREE, "West hardwood patch", VarbitID.FARMING_TRANSMIT_C, new WorldPoint(3702, 3835, 0),
+				NpcID.FOSSIL_SQUIRREL_GARDENER3, 1),
+		Teleport.DIGSITE_PENDANT),
+	// Takes The Ribbiting Tale of a Lily Pad Labour Dispute
+	LOCUS_OASIS("Locus Oasis", 20,
+		new Patches(6702).tree(PatchType.HARDWOOD_TREE, VarbitID.FARMING_TRANSMIT_A, new WorldPoint(1687, 2972, 0),
+			NpcID.FROG_QUEST_MARCELLUS),
+		Teleport.QUETZAL_WHISTLE, Teleport.FAIRY_RING),
+	PORT_SARIM("Port Sarim", 20,
+		new Patches(12082).tree(PatchType.SPIRIT_TREE, VarbitID.FARMING_TRANSMIT_A, new WorldPoint(3060, 3258, 0),
+			NpcID.FARMING_GARDENER_SPIRIT_TREE_1),
+		Teleport.EXPLORERS_RING, Teleport.AMULET_OF_GLORY),
+	ETCETERIA("Etceteria", 20,
+		new Patches(10300).tree(PatchType.SPIRIT_TREE, VarbitID.FARMING_TRANSMIT_B, new WorldPoint(2613, 3857, 0),
+			NpcID.FARMING_GARDENER_SPIRIT_TREE_2),
+		Teleport.RING_OF_WEALTH, Teleport.FAIRY_RING),
+	PRIFDDINAS("Prifddinas", 20,
+		new Patches(13151).tree(PatchType.CRYSTAL_TREE, VarbitID.FARMING_TRANSMIT_E, new WorldPoint(3292, 6119, 0), -1),
+		Teleport.TELEPORT_CRYSTAL, Teleport.ETERNAL_TELEPORT_CRYSTAL);
 
 	private final String displayName;
 	/**
@@ -122,7 +170,7 @@ public enum FarmLocation
 	 */
 	private final int radius;
 	/**
-	 * The herb patch first, then allotments, the flower patch, the tree and the fruit tree.
+	 * The herb patch first, then allotments, the flower patch and the trees.
 	 */
 	private final List<FarmPatch> patches;
 	/**
@@ -156,8 +204,9 @@ public enum FarmLocation
 		}
 		for (Patches.Tree tree : patches.trees)
 		{
-			built.add(new FarmPatch(this, tree.type, tree.type == PatchType.TREE ? "Tree patch" : "Fruit tree patch",
-				patches.region, tree.varbit, tree.point, tree.gardener, tree.level));
+			// Nobody gets to a patch to no end: the run leaves out what the player can't plant yet
+			built.add(new FarmPatch(this, tree.type, tree.name, patches.region, tree.varbit, tree.point, tree.gardener,
+				Math.max(tree.level, tree.type.getPlantLevel())));
 		}
 		this.patches = List.copyOf(built);
 	}
@@ -173,6 +222,15 @@ public enum FarmLocation
 			}
 		}
 		return ofType;
+	}
+
+	/**
+	 * Whether a tool leprechaun stands by the location's herb patch to note herbs. Every herb patch
+	 * has one; the Troll Stronghold's lies in a deckchair on the roof.
+	 */
+	boolean hasToolLeprechaun()
+	{
+		return !patches(PatchType.HERB).isEmpty();
 	}
 
 	/**
@@ -257,14 +315,16 @@ public enum FarmLocation
 		private static final class Tree
 		{
 			private final PatchType type;
+			private final String name;
 			private final int varbit;
 			private final WorldPoint point;
 			private final int gardener;
 			private final int level;
 
-			private Tree(PatchType type, int varbit, WorldPoint point, int gardener, int level)
+			private Tree(PatchType type, String name, int varbit, WorldPoint point, int gardener, int level)
 			{
 				this.type = type;
+				this.name = name;
 				this.varbit = varbit;
 				this.point = point;
 				this.gardener = gardener;
@@ -330,7 +390,25 @@ public enum FarmLocation
 
 		Patches tree(int varbit, WorldPoint point, int gardener, int level)
 		{
-			trees.add(new Tree(PatchType.TREE, varbit, point, gardener, level));
+			return tree(PatchType.TREE, varbit, point, gardener, level);
+		}
+
+		/**
+		 * A tree patch of any kind; a gardener of -1 is none.
+		 */
+		Patches tree(PatchType type, int varbit, WorldPoint point, int gardener)
+		{
+			return tree(type, varbit, point, gardener, 1);
+		}
+
+		Patches tree(PatchType type, int varbit, WorldPoint point, int gardener, int level)
+		{
+			return tree(type, type.getPatchName(), varbit, point, gardener, level);
+		}
+
+		Patches tree(PatchType type, String name, int varbit, WorldPoint point, int gardener, int level)
+		{
+			trees.add(new Tree(type, name, varbit, point, gardener, level));
 			return this;
 		}
 
@@ -341,8 +419,7 @@ public enum FarmLocation
 
 		Patches fruitTree(int varbit, WorldPoint point, int gardener, int level)
 		{
-			trees.add(new Tree(PatchType.FRUIT_TREE, varbit, point, gardener, level));
-			return this;
+			return tree(PatchType.FRUIT_TREE, varbit, point, gardener, level);
 		}
 	}
 }

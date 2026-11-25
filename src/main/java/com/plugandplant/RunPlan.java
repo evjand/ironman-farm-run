@@ -40,6 +40,24 @@ class RunPlan
 		 * The player's Farming level, boosts included, which decides the Farming Guild patches they can reach.
 		 */
 		int farmingLevel;
+		/**
+		 * The kinds of patch whose produce is noted at the tool leprechaun as a step.
+		 */
+		Set<PatchType> noted;
+
+		Options(RunPreset preset, boolean compost, boolean protect, int farmingLevel, Set<PatchType> noted)
+		{
+			this.preset = preset;
+			this.compost = compost;
+			this.protect = protect;
+			this.farmingLevel = farmingLevel;
+			this.noted = noted;
+		}
+
+		Options(RunPreset preset, boolean compost, boolean protect, int farmingLevel)
+		{
+			this(preset, compost, protect, farmingLevel, Set.of());
+		}
 
 		/**
 		 * Whether the run tends the patch: one of the kinds it covers, within the player's reach.
@@ -195,6 +213,7 @@ class RunPlan
 		// A seed box the game hasn't shown the contents of is taken to hold whatever the player needs
 		boolean seedBox = carried.isSeedBoxUnknown();
 		Map<Integer, Integer> seedsLeft = new HashMap<>(carried.getItems());
+		int spiritSlots = spiritSlots(states, options.getFarmingLevel());
 
 		for (FarmLocation location : stops)
 		{
@@ -207,6 +226,14 @@ class RunPlan
 				}
 
 				PatchStatus status = states.getOrDefault(patch, PatchState.UNKNOWN).getStatus();
+				if (takesSpiritSlot(patch, status))
+				{
+					if (spiritSlots <= 0)
+					{
+						continue;
+					}
+					spiritSlots--;
+				}
 				boolean replant = status.leadsToReplanting();
 				if (replant)
 				{
@@ -227,15 +254,21 @@ class RunPlan
 				}
 
 				boolean needsCompost = options.isCompost() && !composted.contains(patch);
-				boolean needsPayment = options.isProtect() && patch.getType().isTree() && !protectedTrees.contains(patch);
+				boolean needsPayment = options.isProtect() && patch.getType().isProtectable() && !protectedTrees.contains(patch);
 				// The gardener can only be paid with the payment to hand; without it the tree goes unprotected
 				Sapling tree = states.getOrDefault(patch, PatchState.UNKNOWN).getCrop();
-				boolean canPay = tree != null && carried.count(tree.getPayment()) >= tree.getPaymentAmount();
+				boolean canPay = tree != null && tree.canPay(carried);
 				if (needsPayment && canPay && status == PatchStatus.GROWING && justPlanted.contains(patch))
 				{
 					payable.add(patch);
 				}
 				Step step = step(status, needsCompost, needsPayment && canPay, justPlanted.contains(patch));
+				// A patch's produce is noted as its last step, before going on to the next patch with room to spare
+				if (step == null && justPlanted.contains(patch) && options.getNoted().contains(patch.getType())
+					&& location.hasToolLeprechaun() && carried.unnoted(patch.getType().produce()) > 0)
+				{
+					step = Step.NOTE;
+				}
 				if (step == null)
 				{
 					// Planted on this run without the payment to hand: nothing to do, but the checklist says what's missing
@@ -277,6 +310,77 @@ class RunPlan
 			Collections.unmodifiableMap(seedsFor),
 			Collections.unmodifiableMap(contractSeeds),
 			Collections.unmodifiableSet(withoutSeeds));
+	}
+
+	/**
+	 * How many spirit trees the game lets a player have planted at once at a Farming level.
+	 */
+	static int spiritTreeLimit(int farmingLevel)
+	{
+		if (farmingLevel >= 99)
+		{
+			return Integer.MAX_VALUE;
+		}
+		if (farmingLevel >= 96)
+		{
+			return 4;
+		}
+		if (farmingLevel >= 93)
+		{
+			return 3;
+		}
+		if (farmingLevel >= 88)
+		{
+			return 2;
+		}
+		return farmingLevel >= 83 ? 1 : 0;
+	}
+
+	/**
+	 * How many more spirit trees the player may plant, as the game caps how many stand at once.
+	 */
+	static int spiritSlots(Map<FarmPatch, PatchState> states, int farmingLevel)
+	{
+		int limit = spiritTreeLimit(farmingLevel);
+		if (limit == Integer.MAX_VALUE)
+		{
+			return limit;
+		}
+		int standing = 0;
+		for (Map.Entry<FarmPatch, PatchState> state : states.entrySet())
+		{
+			if (state.getKey().getType() == PatchType.SPIRIT_TREE && holdsTree(state.getValue().getStatus()))
+			{
+				standing++;
+			}
+		}
+		return limit - standing;
+	}
+
+	/**
+	 * Whether tending the patch means planting a spirit tree where none stands, which is only worth
+	 * the trip while the player may plant another.
+	 */
+	static boolean takesSpiritSlot(FarmPatch patch, PatchStatus status)
+	{
+		return patch.getType() == PatchType.SPIRIT_TREE && status.needsVisit() && !holdsTree(status);
+	}
+
+	/**
+	 * Whether a living tree stands in the patch, which counts towards the spirit tree limit.
+	 */
+	private static boolean holdsTree(PatchStatus status)
+	{
+		switch (status)
+		{
+			case GROWING:
+			case DISEASED:
+			case CHECK_HEALTH:
+			case GROWN:
+				return true;
+			default:
+				return false;
+		}
 	}
 
 	/**

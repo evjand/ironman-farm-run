@@ -86,6 +86,7 @@ public class PlugAndPlantPlugin extends Plugin implements PlugAndPlantPanel.List
 	 * can show its state wrongly for a moment before the game catches up.
 	 */
 	private static final int SETTLE_TICKS = 3;
+	private static final int INVENTORY_SIZE = 28;
 
 	private static final int[] RUNE_POUCH_TYPES = {
 		VarbitID.RUNE_POUCH_TYPE_1, VarbitID.RUNE_POUCH_TYPE_2, VarbitID.RUNE_POUCH_TYPE_3,
@@ -270,7 +271,7 @@ public class PlugAndPlantPlugin extends Plugin implements PlugAndPlantPanel.List
 			gardeners.clear();
 			banks.clear();
 			patchOverlay.setHighlights(List.of(), List.of(), List.of());
-			itemHighlightOverlay.setItems(Map.of());
+			itemHighlightOverlay.setItems(Map.of(), Set.of());
 			checklistOverlay.setContent(null);
 			previousStatuses.clear();
 			lastPanelState = null;
@@ -609,9 +610,11 @@ public class PlugAndPlantPlugin extends Plugin implements PlugAndPlantPanel.List
 		updateJustPlanted(patches, playerPoint);
 
 		// The checklist goes by what the player wants; the steps by what they can do with what they carry
-		RunPlan.Options wantedOptions = new RunPlan.Options(preset, preset.isCompost(), preset.isProtect(), farmingLevel);
+		RunPlan.Options wantedOptions = new RunPlan.Options(preset, preset.isCompost(), preset.isProtect(), farmingLevel,
+			preset.notedTypes());
 		boolean carryingCompost = carried.has(ItemID.BOTTOMLESS_COMPOST_BUCKET_FILLED) || carried.hasAny(RunItems.COMPOST_BUCKETS);
-		RunPlan.Options options = new RunPlan.Options(preset, preset.isCompost() && carryingCompost, preset.isProtect(), farmingLevel);
+		RunPlan.Options options = new RunPlan.Options(preset, preset.isCompost() && carryingCompost, preset.isProtect(),
+			farmingLevel, preset.notedTypes());
 
 		if (runActive && playerPoint != null)
 		{
@@ -665,8 +668,13 @@ public class PlugAndPlantPlugin extends Plugin implements PlugAndPlantPanel.List
 				preset.isGraceful() ? gracefulPieces : List.of()),
 			contract));
 
-		updateHighlights(plan, patches, contract);
-		itemHighlightOverlay.setItems(itemHighlights(plan, patches, playerPoint));
+		updateHighlights(preset, plan, patches, carried, playerPoint, contract);
+		Set<Integer> produce = new HashSet<>();
+		for (PatchType type : preset.notedTypes())
+		{
+			produce.addAll(type.produce());
+		}
+		itemHighlightOverlay.setItems(itemHighlights(plan, patches, playerPoint, produce), produce);
 		checklistOverlay.setContent(overlayContent(preset, loggedIn, plan, patches, stops, checklist, playerPoint, options, contract));
 
 		Set<RunOption> runOptions = EnumSet.noneOf(RunOption.class);
@@ -714,6 +722,7 @@ public class PlugAndPlantPlugin extends Plugin implements PlugAndPlantPanel.List
 		Map<FarmLocation, LocationSettings> settings, int farmingLevel)
 	{
 		Set<FarmLocation> stops = EnumSet.noneOf(FarmLocation.class);
+		int spiritSlots = RunPlan.spiritSlots(patches, farmingLevel);
 		for (FarmLocation location : preset.locations())
 		{
 			if (!settings.get(location).isEnabled())
@@ -722,10 +731,20 @@ public class PlugAndPlantPlugin extends Plugin implements PlugAndPlantPanel.List
 			}
 			for (FarmPatch anchor : preset.anchors(location, farmingLevel))
 			{
-				if (patches.getOrDefault(anchor, PatchState.UNKNOWN).getStatus().needsVisit())
+				PatchStatus status = patches.getOrDefault(anchor, PatchState.UNKNOWN).getStatus();
+				if (!status.needsVisit())
 				{
-					stops.add(location);
+					continue;
 				}
+				if (RunPlan.takesSpiritSlot(anchor, status))
+				{
+					if (spiritSlots <= 0)
+					{
+						continue;
+					}
+					spiritSlots--;
+				}
+				stops.add(location);
 			}
 		}
 		return stops;
@@ -972,17 +991,44 @@ public class PlugAndPlantPlugin extends Plugin implements PlugAndPlantPanel.List
 		}
 		if (preset.includesTrees())
 		{
-			if (preset.isProtect())
+			List<Integer> specialSaplings = new ArrayList<>();
+			Set<Integer> payments = new LinkedHashSet<>();
+			List<Integer> growing = new ArrayList<>();
+			for (PatchType type : RunPreset.TYPES)
 			{
-				Set<Integer> payments = new LinkedHashSet<>();
-				for (Sapling sapling : Sapling.values())
+				if (!type.isTree() || !preset.includes(type))
 				{
-					payments.add(sapling.getPayment());
+					continue;
 				}
+				if (type.isSpecialTree())
+				{
+					specialSaplings.addAll(type.getSeeds());
+				}
+				for (Sapling crop : type.getCrops())
+				{
+					for (Sapling.Payment payment : crop == null ? List.<Sapling.Payment>of() : crop.getPayments())
+					{
+						payments.add(payment.getItem());
+					}
+				}
+				growing.addAll(type.getSaplingSeeds());
+				// Celastrus bark and crystal shards are cut from the tree
+				if (type.harvestItems() == RunItems.AXES)
+				{
+					equipment.addAll(RunItems.AXES);
+				}
+			}
+			if (!specialSaplings.isEmpty())
+			{
+				sections.put(BankSection.SPECIAL_SAPLINGS, specialSaplings);
+			}
+			if (preset.isProtect() && !payments.isEmpty())
+			{
 				sections.put(BankSection.PAYMENTS, List.copyOf(payments));
 			}
 			equipment.addAll(RunItems.TREE_EQUIPMENT);
-			sections.put(BankSection.GROWING, RunItems.SAPLINGS_TO_GROW);
+			growing.addAll(RunItems.GROWING_TOOLS);
+			sections.put(BankSection.GROWING, growing);
 		}
 
 		// A contract's seed is shown even when the player doesn't grow that kind of crop otherwise
@@ -1056,7 +1102,8 @@ public class PlugAndPlantPlugin extends Plugin implements PlugAndPlantPanel.List
 		}
 	}
 
-	private void updateHighlights(RunPlan plan, Map<FarmPatch, PatchState> patches, @Nullable FarmingContract contract)
+	private void updateHighlights(RunPreset preset, RunPlan plan, Map<FarmPatch, PatchState> patches, Carried carried,
+		@Nullable WorldPoint playerPoint, @Nullable FarmingContract contract)
 	{
 		if (!runActive || !config.highlightPatches())
 		{
@@ -1070,7 +1117,8 @@ public class PlugAndPlantPlugin extends Plugin implements PlugAndPlantPanel.List
 		{
 			FarmPatch patch = entry.getValue();
 			Step step = plan.getSteps().get(patch);
-			if (step != null)
+			// Noting is done at the leprechaun, which is highlighted instead
+			if (step != null && step != Step.NOTE)
 			{
 				// A patch can be several objects; box them all but label only one
 				String label = labelled.add(patch) ? stepLabel(patch, step, plan, patches, contract) : null;
@@ -1089,19 +1137,39 @@ public class PlugAndPlantPlugin extends Plugin implements PlugAndPlantPanel.List
 				npcHighlights.add(new PatchOverlay.NpcHighlight(entry.getKey(), Step.PAY.getColor(),
 					stepLabel(patch, Step.PAY, plan, patches, contract)));
 			}
-			else if (step == Step.REMOVE)
+			else if (step == Step.REMOVE && patch.getType().isRemovedForCoins())
 			{
 				npcHighlights.add(new PatchOverlay.NpcHighlight(entry.getKey(), step.getColor(), "Remove for " + Checklist.REMOVAL_COINS + " coins"));
 			}
 		}
+		// The leprechaun notes produce once the stop is replanted, or sooner when a full inventory stops a
+		// harvest halfway
+		Set<PatchType> noted = preset.notedTypes();
+		boolean full = !noted.isEmpty() && inventoryFull();
+		for (Map.Entry<NPC, FarmLocation> entry : gardeners.leprechauns().entrySet())
+		{
+			FarmLocation location = entry.getValue();
+			boolean noteStep = false;
+			boolean stuck = false;
+			for (FarmPatch patch : location.getPatches())
+			{
+				Step step = plan.getSteps().get(patch);
+				noteStep |= step == Step.NOTE;
+				stuck |= full && step == Step.HARVEST && noted.contains(patch.getType())
+					&& carried.unnoted(patch.getType().produce()) > 0;
+			}
+			if (noteStep || stuck)
+			{
+				npcHighlights.add(new PatchOverlay.NpcHighlight(entry.getKey(), Step.NOTE.getColor(), Step.NOTE.getLabel()));
+			}
+		}
 		// A patch with something to do whose object hasn't been recognised gets a box on its known tile
 		List<PatchOverlay.TileHighlight> tileHighlights = new ArrayList<>();
-		WorldPoint playerPoint = client.getLocalPlayer() == null ? null : Positions.of(client, client.getLocalPlayer());
 		for (Map.Entry<FarmPatch, Step> entry : plan.getSteps().entrySet())
 		{
 			FarmPatch patch = entry.getKey();
 			boolean anchor = patch.getType() == PatchType.HERB || patch.getType().isTree();
-			if (anchor && !labelled.contains(patch) && playerPoint != null && patch.getLocation().isNear(playerPoint, 0))
+			if (anchor && entry.getValue() != Step.NOTE && !labelled.contains(patch) && playerPoint != null && patch.getLocation().isNear(playerPoint, 0))
 			{
 				tileHighlights.add(new PatchOverlay.TileHighlight(patch.getPoint(), entry.getValue().getColor(),
 					stepLabel(patch, entry.getValue(), plan, patches, contract)));
@@ -1113,7 +1181,8 @@ public class PlugAndPlantPlugin extends Plugin implements PlugAndPlantPanel.List
 	/**
 	 * The items the patches the player is at need next, in the colour of the step that uses them.
 	 */
-	private Map<Integer, Color> itemHighlights(RunPlan plan, Map<FarmPatch, PatchState> patches, @Nullable WorldPoint playerPoint)
+	private Map<Integer, Color> itemHighlights(RunPlan plan, Map<FarmPatch, PatchState> patches, @Nullable WorldPoint playerPoint,
+		Set<Integer> produce)
 	{
 		if (!config.highlightItems() || playerPoint == null)
 		{
@@ -1167,15 +1236,21 @@ public class PlugAndPlantPlugin extends Plugin implements PlugAndPlantPanel.List
 					needed = List.of(ItemID.SPADE);
 					break;
 				case REMOVE:
-					needed = List.of(ItemID.COINS);
+					needed = patch.getType().removalItems();
 					break;
 				case PAY:
 					Sapling tree = patches.get(patch).getCrop();
-					needed = tree == null ? List.of() : List.of(tree.getPayment());
+					needed = new ArrayList<>();
+					for (Sapling.Payment payment : tree == null ? List.<Sapling.Payment>of() : tree.getPayments())
+					{
+						needed.add(payment.getItem());
+					}
 					break;
 				case HARVEST:
-					// Crops are harvested with a spade
-					needed = List.of(ItemID.SPADE);
+					needed = patch.getType().harvestItems();
+					break;
+				case NOTE:
+					needed = List.copyOf(produce);
 					break;
 				default:
 					needed = List.of();
@@ -1539,7 +1614,33 @@ public class PlugAndPlantPlugin extends Plugin implements PlugAndPlantPanel.List
 				}
 			}
 		}
-		return new Carried(items, pouchRunes, unlimitedRunes, leprechaun(), seedBoxUnknown);
+		return new Carried(items, pouchRunes, unlimitedRunes, leprechaun(), seedBoxUnknown, unnoted());
+	}
+
+	private boolean inventoryFull()
+	{
+		ItemContainer inventory = client.getItemContainer(InventoryID.INV);
+		return inventory != null && inventory.count() >= INVENTORY_SIZE;
+	}
+
+	/**
+	 * The inventory's items that aren't noted, by their own ids.
+	 */
+	private Map<Integer, Integer> unnoted()
+	{
+		ItemContainer inventory = client.getItemContainer(InventoryID.INV);
+		Map<Integer, Integer> unnoted = new HashMap<>();
+		if (inventory != null)
+		{
+			for (Item item : inventory.getItems())
+			{
+				if (item.getId() > 0 && itemManager.canonicalize(item.getId()) == item.getId())
+				{
+					unnoted.merge(item.getId(), item.getQuantity(), Integer::sum);
+				}
+			}
+		}
+		return unnoted;
 	}
 
 	/**

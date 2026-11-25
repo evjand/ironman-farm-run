@@ -92,7 +92,10 @@ public class RunPresetTest
 			.withRole(PatchType.FLOWER, PatchRole.TEND)
 			.withLocationEnabled(FarmLocation.WEISS, false)
 			.withExcluded(FarmLocation.FARMING_GUILD, PatchType.TREE, true)
-			.withGraceful(true);
+			.withRole(PatchType.CALQUAT, PatchRole.VISIT)
+			.withGraceful(true)
+			.withNoteHerbs(true)
+			.withNoteAllotmentsAndFlowers(true);
 
 		assertEquals(custom, PresetStore.roundTrip(new Gson(), custom));
 	}
@@ -103,5 +106,16 @@ public class RunPresetTest
 		assertFalse(RunOption.PROTECT.appliesTo(Presets.HERBS));
 		assertTrue(RunOption.PROTECT.appliesTo(Presets.TREES));
 		assertTrue(RunOption.GRACEFUL.isOn(RunOption.GRACEFUL.set(Presets.HERBS, true)));
+		assertTrue(RunOption.NOTE_HERBS.appliesTo(Presets.HERBS));
+		assertFalse(RunOption.NOTE_HERBS.appliesTo(Presets.TREES));
+		assertTrue(RunOption.NOTE_HERBS.isOn(RunOption.NOTE_HERBS.set(Presets.HERBS, true)));
+		assertFalse(RunOption.NOTE_ALLOTMENTS_AND_FLOWERS.appliesTo(Presets.HERBS));
+		assertTrue(RunOption.NOTE_ALLOTMENTS_AND_FLOWERS.appliesTo(Presets.herbs(true, false)));
+
+		// Allotments and flowers are noted only with their own option, as their produce may go to the compost bin
+		RunPreset all = Presets.herbs(true, true).withNoteHerbs(true);
+		assertEquals(Set.of(PatchType.HERB), all.notedTypes());
+		assertEquals(Set.of(PatchType.HERB, PatchType.ALLOTMENT, PatchType.FLOWER),
+			all.withNoteAllotmentsAndFlowers(true).notedTypes());
 	}
 }

@@ -10,23 +10,35 @@ import lombok.RequiredArgsConstructor;
 @RequiredArgsConstructor
 enum RunOption
 {
-	COMPOST("Compost", "Compost each patch you plant, while you carry compost", false),
+	COMPOST("Compost", "Compost each patch you plant, while you carry compost"),
 	PROTECT("Pay gardeners",
-		"Pay each gardener to protect the tree you plant. The checklist and bank filter show the payment each sapling takes.",
-		true),
-	GRACEFUL("Graceful", "Add the graceful outfit to the checklist and the bank filter", false),
-	VOLCANIC_ASH("Volcanic ash", "Add volcanic ash to the checklist and the bank filter", false);
+		"Pay each gardener to protect the tree you plant. The checklist and bank filter show the payment each sapling takes."),
+	NOTE_HERBS("Note herbs",
+		"Once the herb patch is replanted, use your herbs on the tool leprechaun to note them before the next patch"),
+	NOTE_ALLOTMENTS_AND_FLOWERS("Note allotments & flowers",
+		"Note allotment and flower produce at the tool leprechaun too. Leave it off to compost them instead."),
+	GRACEFUL("Graceful", "Add the graceful outfit to the checklist and the bank filter"),
+	VOLCANIC_ASH("Volcanic ash", "Add volcanic ash to the checklist and the bank filter");
 
 	private final String label;
 	private final String description;
-	/**
-	 * Only for runs with trees.
-	 */
-	private final boolean treesOnly;
 
+	/**
+	 * Whether the option means anything for the run: paying gardeners takes trees, noting herbs takes herbs.
+	 */
 	boolean appliesTo(RunPreset preset)
 	{
-		return !treesOnly || preset.includesTrees();
+		switch (this)
+		{
+			case PROTECT:
+				return preset.includesTrees();
+			case NOTE_HERBS:
+				return preset.includes(PatchType.HERB);
+			case NOTE_ALLOTMENTS_AND_FLOWERS:
+				return preset.includes(PatchType.ALLOTMENT) || preset.includes(PatchType.FLOWER);
+			default:
+				return true;
+		}
 	}
 
 	boolean isOn(RunPreset preset)
@@ -37,6 +49,10 @@ enum RunOption
 				return preset.isCompost();
 			case PROTECT:
 				return preset.isProtect();
+			case NOTE_HERBS:
+				return preset.isNoteHerbs();
+			case NOTE_ALLOTMENTS_AND_FLOWERS:
+				return preset.isNoteAllotmentsAndFlowers();
 			case GRACEFUL:
 				return preset.isGraceful();
 			default:
@@ -52,6 +68,10 @@ enum RunOption
 				return preset.withCompost(on);
 			case PROTECT:
 				return preset.withProtect(on);
+			case NOTE_HERBS:
+				return preset.withNoteHerbs(on);
+			case NOTE_ALLOTMENTS_AND_FLOWERS:
+				return preset.withNoteAllotmentsAndFlowers(on);
 			case GRACEFUL:
 				return preset.withGraceful(on);
 			default:

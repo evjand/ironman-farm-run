@@ -205,4 +205,32 @@ public class PatchDecoderTest
 		assertEquals("Growing, 1m", PlugAndPlantPlugin.describe(new PatchState(PatchStatus.GROWING, SEEN_AT + 5), SEEN_AT));
 		assertEquals("Check health", PlugAndPlantPlugin.describe(new PatchState(PatchStatus.CHECK_HEALTH, 0), SEEN_AT));
 	}
+
+	private static PatchState decode(PatchType type, int value)
+	{
+		return PatchDecoder.predict(type, value + ":" + SEEN_AT, SEEN_AT, null, null);
+	}
+
+	@Test
+	public void specialTreesDecodeWhatIsLeftToDoWithThem()
+	{
+		// A spirit tree that has had its health checked stands there, fully grown
+		assertEquals(new PatchState(PatchStatus.GROWN, 0, Sapling.SPIRIT_TREE), decode(PatchType.SPIRIT_TREE, 20));
+		assertEquals(new PatchState(PatchStatus.CHECK_HEALTH, 0, Sapling.SPIRIT_TREE), decode(PatchType.SPIRIT_TREE, 44));
+		// Celastrus bark and crystal shards are harvested; a stripped celastrus is taken down after
+		assertEquals(new PatchState(PatchStatus.READY, 0, Sapling.CELASTRUS), decode(PatchType.CELASTRUS, 14));
+		assertEquals(new PatchState(PatchStatus.GROWN, 0, Sapling.CELASTRUS), decode(PatchType.CELASTRUS, 17));
+		assertEquals(new PatchState(PatchStatus.STUMP, 0, Sapling.CELASTRUS), decode(PatchType.CELASTRUS, 28));
+		assertEquals(new PatchState(PatchStatus.READY, 0, Sapling.CRYSTAL_TREE), decode(PatchType.CRYSTAL_TREE, 15));
+		// A calquat with fruit on it is grown, like a fruit tree
+		assertEquals(new PatchState(PatchStatus.GROWN, 0, Sapling.CALQUAT), decode(PatchType.CALQUAT, 12));
+		assertEquals(PatchStatus.EMPTY, decode(PatchType.REDWOOD, 3).getStatus());
+
+		// A teak sapling just planted has seven growth ticks of 640 minutes to go
+		PatchState teak = decode(PatchType.HARDWOOD_TREE, 8);
+		assertEquals(PatchStatus.GROWING, teak.getStatus());
+		assertEquals(Sapling.TEAK, teak.getCrop());
+		assertEquals(PatchDecoder.tickTime(640, 7, SEEN_AT, null, null), teak.getReadyAt());
+		assertEquals(Sapling.MAHOGANY, decode(PatchType.HARDWOOD_TREE, 30).getCrop());
+	}
 }

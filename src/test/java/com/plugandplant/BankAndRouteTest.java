@@ -71,13 +71,34 @@ public class BankAndRouteTest
 	}
 
 	@Test
-	public void saplingsToGrowCoverEveryTreeSeedAndItsUnwateredSeedling()
+	public void everyTreeTypeListsTheSaplingsAndSeedsOfItsCrops()
 	{
-		assertEquals(13 * 2 + 3 + 2 + 9, RunItems.SAPLINGS_TO_GROW.size());
-		// Watered seedlings count as saplings, so they're shown with them
-		assertFalse(RunItems.SAPLINGS_TO_GROW.contains(ItemID.PLANTPOT_PINEAPPLE_SEED_WATERED));
-		assertTrue(RunItems.FRUIT_TREE_SAPLINGS.contains(ItemID.PLANTPOT_PINEAPPLE_SEED_WATERED));
-		assertEquals(RunItems.SAPLINGS_TO_GROW.size(), Set.copyOf(RunItems.SAPLINGS_TO_GROW).size());
+		for (PatchType type : PatchType.values())
+		{
+			if (!type.isTree())
+			{
+				continue;
+			}
+			Set<Sapling> crops = new HashSet<>();
+			for (Sapling crop : type.getCrops())
+			{
+				if (crop != null)
+				{
+					crops.add(crop);
+				}
+			}
+			// Each crop's sapling and watered seedling can be planted; watered seedlings count as saplings
+			assertEquals(type.name(), crops.size() * 2, type.getSeeds().size());
+			for (Sapling crop : crops)
+			{
+				assertTrue(type.name(), type.getSeeds().contains(crop.getSapling()));
+				assertTrue(type.name(), type.getSeeds().contains(crop.getWateredSeedling()));
+				assertFalse(type.name(), type.getSaplingSeeds().contains(crop.getWateredSeedling()));
+			}
+			// A seed and its unwatered seedling for each crop
+			assertEquals(type.name(), crops.size() * 2, Set.copyOf(type.getSaplingSeeds()).size());
+		}
+		assertEquals(3 + 2 + 9, Set.copyOf(RunItems.GROWING_TOOLS).size());
 	}
 
 	@Test
@@ -234,8 +255,9 @@ public class BankAndRouteTest
 			}
 		}
 		// Herb runs: seven locations with two allotments and a flower patch, Harmony with one allotment,
-		// and two with a herb patch alone. Tree runs: seven trees and seven fruit trees.
-		assertEquals(7 * 4 + 2 + 2 + 7 + 7, keys.size());
+		// and two with a herb patch alone. Tree runs: seven trees and seven fruit trees. Special trees:
+		// four hardwood, three calquat, five spirit tree, and a celastrus, redwood and crystal tree patch.
+		assertEquals(7 * 4 + 2 + 2 + 7 + 7 + 4 + 3 + 5 + 3, keys.size());
 	}
 
 	@Test

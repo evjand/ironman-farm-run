@@ -348,4 +348,162 @@ public class RunPlanTest
 
 		assertEquals(List.of(GUILD_TREE), Presets.TREES.anchors(FarmLocation.FARMING_GUILD, 80));
 	}
+
+	private static List<FarmPatch> spiritPatches()
+	{
+		List<FarmPatch> patches = new java.util.ArrayList<>();
+		for (FarmLocation location : Presets.only(PatchType.SPIRIT_TREE).locations())
+		{
+			patches.addAll(location.patches(PatchType.SPIRIT_TREE));
+		}
+		return patches;
+	}
+
+	@Test
+	public void spiritTreesArePlantedOnlyUpToTheLevelsLimit()
+	{
+		RunPreset spirits = Presets.only(PatchType.SPIRIT_TREE);
+		List<FarmPatch> patches = spiritPatches();
+		assertEquals(5, patches.size());
+		// One tree standing, and four empty patches
+		set(patches.get(0), PatchStatus.GROWING);
+		for (FarmPatch patch : patches.subList(1, 5))
+		{
+			set(patch, PatchStatus.EMPTY);
+		}
+
+		// 88 Farming allows two, so one more is planted, at the first stop with an empty patch
+		RunPlan two = plan(spirits.locations(), new RunPlan.Options(spirits, false, false, 88));
+		assertEquals(Set.of(patches.get(1)), two.getSteps().keySet());
+
+		RunPlan four = plan(spirits.locations(), new RunPlan.Options(spirits, false, false, 96));
+		assertEquals(3, four.getSteps().size());
+		RunPlan unlimited = plan(spirits.locations(), new RunPlan.Options(spirits, false, false, 99));
+		assertEquals(4, unlimited.getSteps().size());
+
+		// A tree already standing is tended whatever the limit
+		set(patches.get(1), PatchStatus.CHECK_HEALTH);
+		RunPlan full = plan(spirits.locations(), new RunPlan.Options(spirits, false, false, 88));
+		assertEquals(Map.of(patches.get(1), Step.CHECK_HEALTH), full.getSteps());
+	}
+
+	@Test
+	public void spiritTreeGardenerIsPaidOnlyWithTheWholePayment()
+	{
+		RunPreset spirits = Presets.only(PatchType.SPIRIT_TREE);
+		RunPlan.Options options = new RunPlan.Options(spirits, false, true, 99);
+		FarmPatch patch = FarmLocation.PORT_SARIM.patches(PatchType.SPIRIT_TREE).get(0);
+		states.put(patch, new PatchState(PatchStatus.GROWING, 123, Sapling.SPIRIT_TREE));
+		List<FarmLocation> stops = List.of(FarmLocation.PORT_SARIM);
+		carried.put(ItemID.MM_MONKEY_NUTS, 5);
+		carried.put(ItemID.MM_MONKEY_BAR, 1);
+
+		assertNull(plan(stops, options, Set.of(), Set.of(), Set.of(patch), null).getSteps().get(patch));
+
+		carried.put(ItemID.LUNAR_GROUNDTOOTH, 1);
+		assertEquals(Step.PAY, plan(stops, options, Set.of(), Set.of(), Set.of(patch), null).getSteps().get(patch));
+	}
+
+	@Test
+	public void crystalTreeIsNeverPaidFor()
+	{
+		RunPreset crystal = Presets.only(PatchType.CRYSTAL_TREE);
+		FarmPatch patch = FarmLocation.PRIFDDINAS.patches(PatchType.CRYSTAL_TREE).get(0);
+		set(patch, PatchStatus.EMPTY);
+		carried.put(ItemID.PLANTPOT_CRYSTAL_TREE_SAPLING, 1);
+
+		RunPlan plan = plan(List.of(FarmLocation.PRIFDDINAS), new RunPlan.Options(crystal, false, true, 99));
+
+		assertEquals(Step.PLANT, plan.getSteps().get(patch));
+		assertTrue(plan.getToPay().isEmpty());
+	}
+
+	@Test
+	public void specialTreesAreLeftOutBelowTheLevelToPlantThem()
+	{
+		RunPreset redwoods = Presets.only(PatchType.REDWOOD);
+		FarmPatch redwood = FarmLocation.FARMING_GUILD.patches(PatchType.REDWOOD).get(0);
+		assertEquals(90, redwood.getFarmingLevel());
+		assertEquals(85, FarmLocation.FARMING_GUILD.patches(PatchType.CELASTRUS).get(0).getFarmingLevel());
+		assertEquals(72, FarmLocation.TAI_BWO_WANNAI.patches(PatchType.CALQUAT).get(0).getFarmingLevel());
+		set(redwood, PatchStatus.EMPTY);
+
+		assertTrue(plan(redwoods.locations(), new RunPlan.Options(redwoods, false, false, 89)).getSteps().isEmpty());
+		assertEquals(Step.PLANT, plan(redwoods.locations(), new RunPlan.Options(redwoods, false, false, 90))
+			.getSteps().get(redwood));
+	}
+
+	private RunPlan planNoting(List<FarmLocation> stops, Set<PatchType> noted, Map<Integer, Integer> unnoted,
+		Set<FarmPatch> justPlanted)
+	{
+		RunPlan.Options options = new RunPlan.Options(Presets.herbs(true, true), false, false, 99, noted);
+		return RunPlan.of(stops, states, Set.of(), Set.of(), justPlanted, options,
+			new Carried(carried, Map.of(), Set.of(), Map.of(), false, unnoted), null);
+	}
+
+	private RunPlan planNoting(List<FarmLocation> stops, int herbs, Set<FarmPatch> justPlanted)
+	{
+		return planNoting(stops, Set.of(PatchType.HERB), Map.of(ItemID.UNIDENTIFIED_RANARR, herbs), justPlanted);
+	}
+
+	@Test
+	public void herbsAreNotedOnceThePatchIsReplanted()
+	{
+		List<FarmLocation> stops = List.of(FarmLocation.FALADOR);
+		set(FALADOR_HERB, PatchStatus.READY);
+		assertEquals(Step.HARVEST, planNoting(stops, 5, Set.of()).getSteps().get(FALADOR_HERB));
+
+		// Harvested: planting comes first, so the walk to the leprechaun is made once
+		set(FALADOR_HERB, PatchStatus.EMPTY);
+		assertEquals(Step.PLANT, planNoting(stops, 5, Set.of()).getSteps().get(FALADOR_HERB));
+
+		// Planted: the herbs are noted while standing by the patch, grimy or cleaned
+		set(FALADOR_HERB, PatchStatus.GROWING);
+		assertEquals(Step.NOTE, planNoting(stops, 5, Set.of(FALADOR_HERB)).getSteps().get(FALADOR_HERB));
+		assertEquals(Step.NOTE, planNoting(stops, Set.of(PatchType.HERB), Map.of(ItemID.RANARR_WEED, 3), Set.of(FALADOR_HERB))
+			.getSteps().get(FALADOR_HERB));
+		assertNull(planNoting(stops, 0, Set.of(FALADOR_HERB)).getSteps().get(FALADOR_HERB));
+		// A herb patch left growing from before the run isn't a reason to stop
+		assertNull(planNoting(stops, 5, Set.of()).getSteps().get(FALADOR_HERB));
+	}
+
+	@Test
+	public void eachPatchsProduceIsNotedOnceItIsReplanted()
+	{
+		List<FarmLocation> stops = List.of(FarmLocation.FALADOR);
+		set(FALADOR_HERB, PatchStatus.GROWING);
+		set(FALADOR_ALLOTMENT_1, PatchStatus.GROWING);
+		set(FALADOR_ALLOTMENT_2, PatchStatus.GROWING);
+		set(FALADOR_FLOWER, PatchStatus.READY);
+		carried.put(ItemID.MARIGOLD_SEED, 1);
+		Set<FarmPatch> planted = Set.of(FALADOR_HERB, FALADOR_ALLOTMENT_1, FALADOR_ALLOTMENT_2);
+		Set<PatchType> everything = Set.of(PatchType.HERB, PatchType.ALLOTMENT, PatchType.FLOWER);
+
+		// The herbs are noted before the flower is harvested, so there is room for it; the allotments'
+		// potatoes have been noted already
+		RunPlan plan = planNoting(stops, everything, Map.of(ItemID.UNIDENTIFIED_RANARR, 5), planted);
+		assertEquals(Map.of(FALADOR_HERB, Step.NOTE, FALADOR_FLOWER, Step.HARVEST), plan.getSteps());
+
+		// Potatoes still on hand are noted at the allotments they came from
+		RunPlan potatoes = planNoting(stops, everything, Map.of(ItemID.POTATO, 9), planted);
+		assertEquals(Step.NOTE, potatoes.getSteps().get(FALADOR_ALLOTMENT_1));
+		assertEquals(Step.NOTE, potatoes.getSteps().get(FALADOR_ALLOTMENT_2));
+		assertNull(potatoes.getSteps().get(FALADOR_HERB));
+
+		// Produce the run doesn't note, kept for the compost bin, is left alone
+		assertNull(planNoting(stops, Set.of(PatchType.HERB), Map.of(ItemID.POTATO, 9), planted).getSteps().get(FALADOR_ALLOTMENT_1));
+	}
+
+	@Test
+	public void herbsAreNotedOnlyWhenTheRunNotesThem()
+	{
+		// Troll Stronghold's leprechaun lies in a deckchair on the roof
+		FarmPatch trollHerb = FarmLocation.TROLL_STRONGHOLD.patches(PatchType.HERB).get(0);
+		set(trollHerb, PatchStatus.GROWING);
+		assertEquals(Step.NOTE, planNoting(List.of(FarmLocation.TROLL_STRONGHOLD), 5, Set.of(trollHerb)).getSteps().get(trollHerb));
+
+		set(FALADOR_HERB, PatchStatus.GROWING);
+		assertNull(planNoting(List.of(FarmLocation.FALADOR), Set.of(), Map.of(ItemID.UNIDENTIFIED_RANARR, 5), Set.of(FALADOR_HERB))
+			.getSteps().get(FALADOR_HERB));
+	}
 }

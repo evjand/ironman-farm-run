@@ -20,6 +20,10 @@ enum BankSection
 	FLOWER_SEEDS("Flower seeds"),
 	TREE_SAPLINGS("Tree saplings"),
 	FRUIT_TREE_SAPLINGS("Fruit tree saplings"),
+	/**
+	 * Saplings for the special tree patches: hardwood, calquat, spirit, celastrus, redwood and crystal.
+	 */
+	SPECIAL_SAPLINGS("Special tree saplings"),
 	PAYMENTS("Gardener payments"),
 	TELEPORTS("Teleports"),
 	/**

@@ -26,7 +26,11 @@ public enum Step
 	/**
 	 * Pay the gardener to protect a newly planted tree.
 	 */
-	PAY("Pay", new Color(0xFF, 0x6E, 0xC7));
+	PAY("Pay", new Color(0xFF, 0x6E, 0xC7)),
+	/**
+	 * Use harvested produce on the tool leprechaun to note it.
+	 */
+	NOTE("Note produce", new Color(0x2E, 0xC4, 0xA6));
 
 	private final String label;
 	private final Color color;
